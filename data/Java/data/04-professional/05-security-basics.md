@@ -1,6 +1,6 @@
 # Lesson 05 — Security Basics
 
-**Module 04 · Professional · Lesson 05 of 06**
+**Module 4 · Professional · Lesson 05 of 06**
 
 
 ## Learning objectives

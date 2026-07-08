@@ -1,6 +1,6 @@
 # Lesson 03 — Capstone Projects
 
-**Module 05 · Mastery · Lesson 03 of 04**
+**Module 05 · Mastery · Lesson 03 of 05**
 
 
 ## Learning objectives

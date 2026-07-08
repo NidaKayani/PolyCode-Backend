@@ -2,39 +2,173 @@
 
 **Module 01 · Beginner · Lesson 07 of 10**
 
+## Learning Objectives
 
-## Learning objectives
-
-- Understand **arrays** in Java
-- Read and write small examples you can run locally
-- Connect this topic to the next lesson in the course
+- Declare, initialise, and access arrays
+- Iterate over arrays with loops and the enhanced for loop
+- Use 2D arrays for grid-style data
 
 ## Overview
 
-Arrays is a core topic on the PolyCode **Java Certificate Course** path. Work through the examples, then try the exercise before moving on.
+An **array** is a fixed-size, ordered collection of elements of the same type. Once created, an array's size cannot change. Arrays are the foundation for all data structures in Java.
 
-## Key concepts
+## Key Concepts
 
-1. **Syntax and structure** — how Java expresses this idea clearly
-2. **Common patterns** — what you will see in real projects
-3. **Mistakes to avoid** — typical beginner errors and fixes
-
-## Example
+### 1. Declaring and Creating Arrays
 
 ```java
-// Arrays — practice sketch
-// add your code here
+// Declare an empty array of 5 integers
+int[] scores = new int[5];      // all elements start as 0
+
+// Declare and initialise with values
+int[] primes = {2, 3, 5, 7, 11};
+
+// String array
+String[] days = {"Mon", "Tue", "Wed", "Thu", "Fri"};
+```
+
+### 2. Accessing Elements (zero-indexed)
+
+```java
+int[] nums = {10, 20, 30, 40, 50};
+System.out.println(nums[0]);   // 10  (first element)
+System.out.println(nums[4]);   // 50  (last element)
+System.out.println(nums.length); // 5
+
+nums[2] = 99;   // Change element at index 2
+// Array is now: {10, 20, 99, 40, 50}
+```
+
+> Accessing `nums[5]` on a 5-element array throws `ArrayIndexOutOfBoundsException`!
+
+### 3. Iterating with a for Loop
+
+```java
+int[] scores = {88, 72, 95, 61, 84};
+
+// Standard for loop
+for (int i = 0; i < scores.length; i++) {
+    System.out.println("Score " + (i + 1) + ": " + scores[i]);
+}
+```
+
+### 4. Enhanced for Loop (for-each)
+
+```java
+int[] scores = {88, 72, 95, 61, 84};
+
+for (int score : scores) {
+    System.out.println(score);
+}
+```
+
+Use the enhanced loop when you don't need the index.
+
+### 5. Useful `Arrays` Class Methods
+
+```java
+import java.util.Arrays;
+
+int[] nums = {5, 2, 8, 1, 9};
+
+Arrays.sort(nums);                    // sort in place: {1, 2, 5, 8, 9}
+System.out.println(Arrays.toString(nums)); // [1, 2, 5, 8, 9]
+
+int[] copy = Arrays.copyOf(nums, 3);  // {1, 2, 5}
+boolean equal = Arrays.equals(nums, copy); // false
+```
+
+### 6. 2D Arrays
+
+```java
+int[][] grid = new int[3][3];   // 3 rows, 3 columns
+
+// Initialise with values
+int[][] matrix = {
+    {1, 2, 3},
+    {4, 5, 6},
+    {7, 8, 9}
+};
+
+// Access: matrix[row][column]
+System.out.println(matrix[1][2]);  // 6 (row 1, column 2)
+
+// Iterate with nested loops
+for (int row = 0; row < matrix.length; row++) {
+    for (int col = 0; col < matrix[row].length; col++) {
+        System.out.printf("%3d", matrix[row][col]);
+    }
+    System.out.println();
+}
+```
+
+## Full Example
+
+```java
+import java.util.Arrays;
+
+public class ArraysDemo {
+    public static void main(String[] args) {
+        // Student scores
+        int[] scores = {78, 92, 55, 88, 73, 95, 61};
+
+        // Statistics
+        int sum = 0, max = scores[0], min = scores[0];
+        for (int s : scores) {
+            sum += s;
+            if (s > max) max = s;
+            if (s < min) min = s;
+        }
+        double avg = (double) sum / scores.length;
+
+        System.out.printf("Scores: %s%n", Arrays.toString(scores));
+        System.out.printf("Count:  %d%n", scores.length);
+        System.out.printf("Sum:    %d%n", sum);
+        System.out.printf("Avg:    %.1f%n", avg);
+        System.out.printf("Max:    %d%n", max);
+        System.out.printf("Min:    %d%n", min);
+
+        Arrays.sort(scores);
+        System.out.printf("Sorted: %s%n", Arrays.toString(scores));
+
+        // 2D: 3x3 identity matrix
+        int[][] identity = {{1,0,0},{0,1,0},{0,0,1}};
+        System.out.println("\nIdentity matrix:");
+        for (int[] row : identity) {
+            System.out.println(Arrays.toString(row));
+        }
+    }
+}
+```
+
+**Expected output:**
+```
+Scores: [78, 92, 55, 88, 73, 95, 61]
+Count:  7
+Sum:    542
+Avg:    77.4
+Max:    95
+Min:    55
+Sorted: [55, 61, 73, 78, 88, 92, 95]
+
+Identity matrix:
+[1, 0, 0]
+[0, 1, 0]
+[0, 0, 1]
 ```
 
 ## Exercise
 
-1. Write a short program that uses today's topic.
-2. Change one value and predict the output before running.
-3. Explain the result in your own words (2–3 sentences).
+1. Write a method `reverse(int[] arr)` that reverses an array in place (no new array).
+2. Write a method that searches an array for a value and returns its index, or -1 if not found.
+3. Create a 5×5 2D array and fill it so that each cell contains `row * column`.
 
 ## Checkpoint
 
-You are ready for the next lesson when you can solve the exercise without copying the example.
+You are ready for the next lesson when you can:
+- Explain why arrays are zero-indexed
+- Choose between standard and enhanced for loops
+- Access any element in a 2D array using row/column indices
 
 ---
 

@@ -2,41 +2,171 @@
 
 **Module 01 · Beginner · Lesson 09 of 10**
 
+## Learning Objectives
 
-## Learning objectives
-
-- Understand **strings** in Java
-- Read and write small examples you can run locally
-- Connect this topic to the next lesson in the course
+- Use common `String` methods confidently
+- Understand immutability and why `==` doesn't compare string content
+- Use `StringBuilder` for efficient string building
 
 ## Overview
 
-Strings is a core topic on the PolyCode **Java Certificate Course** path. Work through the examples, then try the exercise before moving on.
+`String` is one of the most-used types in Java. Unlike primitives, `String` is a class with dozens of methods. A critical feature: **strings are immutable** — once created, a String object cannot be changed. Every operation creates a new String.
 
-## Key concepts
+## Key Concepts
 
-1. **Syntax and structure** — how Java expresses this idea clearly
-2. **Common patterns** — what you will see in real projects
-3. **Mistakes to avoid** — typical beginner errors and fixes
-
-## Example
+### 1. Creating Strings
 
 ```java
-// Strings — practice sketch
-// add your code here
+String a = "Hello";                  // String literal (preferred)
+String b = new String("Hello");      // Explicit object (rarely needed)
+```
+
+### 2. Comparing Strings
+
+**Never use `==` to compare string content.** Use `.equals()`.
+
+```java
+String s1 = "Java";
+String s2 = "Java";
+String s3 = new String("Java");
+
+System.out.println(s1 == s2);        // true  (same literal, same object in pool)
+System.out.println(s1 == s3);        // false (different objects in memory!)
+System.out.println(s1.equals(s3));   // true  ← always use this
+System.out.println(s1.equalsIgnoreCase("JAVA")); // true
+```
+
+### 3. Essential String Methods
+
+```java
+String s = "  Hello, Java World!  ";
+
+s.length()               // 22
+s.trim()                 // "Hello, Java World!"  (removes leading/trailing spaces)
+s.toLowerCase()          // "  hello, java world!  "
+s.toUpperCase()          // "  HELLO, JAVA WORLD!  "
+s.contains("Java")       // true
+s.startsWith("  Hello")  // true
+s.endsWith("!")          // false (has trailing space)
+s.indexOf("Java")        // 9  (index of first occurrence)
+s.replace("Java", "Python")  // "  Hello, Python World!  "
+s.substring(8, 12)       // "Java"  (index 8 inclusive to 12 exclusive)
+s.split(", ")            // ["  Hello", "Java World!  "]
+s.isEmpty()              // false
+s.isBlank()              // false (Java 11+: checks for whitespace only)
+```
+
+### 4. String Concatenation and `+`
+
+```java
+String first = "Hello";
+String second = "World";
+String result = first + ", " + second + "!";   // "Hello, World!"
+
+// Concatenating in a loop is SLOW — use StringBuilder instead
+```
+
+### 5. StringBuilder — Efficient String Building
+
+```java
+StringBuilder sb = new StringBuilder();
+for (int i = 1; i <= 5; i++) {
+    sb.append(i);
+    if (i < 5) sb.append(", ");
+}
+String result = sb.toString();
+System.out.println(result);  // 1, 2, 3, 4, 5
+
+// Other StringBuilder methods:
+sb.insert(0, "Numbers: ");
+sb.reverse();
+sb.delete(0, 3);
+```
+
+### 6. String Formatting
+
+```java
+String name = "Alice";
+int age = 25;
+
+// printf style
+String msg = String.format("Name: %s, Age: %d", name, age);
+
+// Modern: formatted() in Java 15+
+String msg2 = "Name: %s, Age: %d".formatted(name, age);
+```
+
+### 7. Converting Between Types
+
+```java
+// String → number
+int n = Integer.parseInt("42");
+double d = Double.parseDouble("3.14");
+
+// Number → String
+String s1 = String.valueOf(42);
+String s2 = Integer.toString(42);
+String s3 = "" + 42;   // quick but less readable
+```
+
+## Full Example
+
+```java
+public class StringsDemo {
+    public static void main(String[] args) {
+        String sentence = "The quick brown fox jumps over the lazy dog";
+
+        System.out.println("Original: " + sentence);
+        System.out.println("Length: " + sentence.length());
+        System.out.println("Upper: " + sentence.toUpperCase());
+        System.out.println("Contains 'fox': " + sentence.contains("fox"));
+        System.out.println("Word count: " + sentence.split(" ").length);
+        System.out.println("Replace: " + sentence.replace("fox", "cat"));
+
+        // Reverse words
+        String[] words = sentence.split(" ");
+        StringBuilder reversed = new StringBuilder();
+        for (int i = words.length - 1; i >= 0; i--) {
+            reversed.append(words[i]);
+            if (i > 0) reversed.append(" ");
+        }
+        System.out.println("Reversed words: " + reversed);
+
+        // Palindrome check
+        String test = "racecar";
+        String rev = new StringBuilder(test).reverse().toString();
+        System.out.println(test + " is palindrome: " + test.equals(rev));
+    }
+}
+```
+
+**Expected output:**
+```
+Original: The quick brown fox jumps over the lazy dog
+Length: 43
+Upper: THE QUICK BROWN FOX JUMPS OVER THE LAZY DOG
+Contains 'fox': true
+Word count: 9
+Replace: The quick brown cat jumps over the lazy dog
+Reversed words: dog lazy the over jumps fox brown quick The
+racecar is palindrome: true
 ```
 
 ## Exercise
 
-1. Write a short program that uses today's topic.
-2. Change one value and predict the output before running.
-3. Explain the result in your own words (2–3 sentences).
+1. Write a method `countVowels(String s)` that counts vowels (a, e, i, o, u) in a string.
+2. Write a method `titleCase(String s)` that capitalises the first letter of every word.
+3. Write a method `isPalindrome(String s)` that returns `true` if the string reads the same forwards and backwards (ignore case and spaces).
 
 ## Checkpoint
 
-You are ready for the next lesson when you can solve the exercise without copying the example.
+You are ready for the next lesson when you can:
+- Explain why `==` fails for string comparison
+- Choose between `String` and `StringBuilder` appropriately
+- Convert a `String` to an `int` and back
 
 ---
+**Next:** Lesson 10 — Scanner and User Input
 
 **Next:** Continue to lesson 10 in this module.
 

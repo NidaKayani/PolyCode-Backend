@@ -1,6 +1,6 @@
 # Lesson 02 — Data Structures
 
-**Module 05 · Mastery · Lesson 02 of 04**
+**Module 05 · Mastery · Lesson 02 of 05**
 
 
 ## Learning objectives

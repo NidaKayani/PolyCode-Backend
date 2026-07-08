@@ -1,40 +1,184 @@
-# Lesson 02 — Interfaces and Abstract Classes
+# Lesson 02 — Interfaces
 
 **Module 02 · Intermediate · Lesson 02 of 06**
 
+## Learning Objectives
 
-## Learning objectives
-
-- Understand **interfaces and abstract classes** in Java
-- Read and write small examples you can run locally
-- Connect this topic to the next lesson in the course
+- Define and implement interfaces
+- Understand how interfaces differ from abstract classes
+- Use default and static interface methods (Java 8+)
 
 ## Overview
 
-Interfaces and Abstract Classes is a core topic on the PolyCode **Java Certificate Course** path. Work through the examples, then try the exercise before moving on.
+An **interface** is a contract — it defines methods a class *must* implement, without providing the implementation. A class can implement **multiple interfaces** (unlike inheritance, where only one parent class is allowed). Interfaces are how Java achieves multiple-type behaviour.
 
-## Key concepts
+## Key Concepts
 
-1. **Syntax and structure** — how Java expresses this idea clearly
-2. **Common patterns** — what you will see in real projects
-3. **Mistakes to avoid** — typical beginner errors and fixes
-
-## Example
+### 1. Defining an Interface
 
 ```java
-// Interfaces and Abstract Classes — practice sketch
-// add your code here
+public interface Drawable {
+    void draw();           // implicitly public abstract
+    double getArea();
+}
+
+public interface Resizable {
+    void resize(double factor);
+}
+```
+
+### 2. Implementing an Interface
+
+```java
+public class Circle implements Drawable, Resizable {
+    private double radius;
+
+    public Circle(double radius) { this.radius = radius; }
+
+    @Override
+    public void draw() {
+        System.out.println("Drawing circle with radius " + radius);
+    }
+
+    @Override
+    public double getArea() { return Math.PI * radius * radius; }
+
+    @Override
+    public void resize(double factor) { radius *= factor; }
+}
+```
+
+### 3. Interface vs Abstract Class
+
+| Feature | Interface | Abstract Class |
+|---------|-----------|----------------|
+| Multiple inheritance | ✅ (implement many) | ❌ (extend only one) |
+| Constructor | ❌ | ✅ |
+| Fields | Only constants (`static final`) | Any fields |
+| Methods | Abstract + default/static | Any methods |
+| Use when | Defining capability | Sharing common code |
+
+### 4. Default Methods (Java 8+)
+
+Provide a default implementation — implementing classes can override it or use it as-is.
+
+```java
+public interface Logger {
+    void log(String message);   // must implement
+
+    default void logError(String message) {   // optional to override
+        log("[ERROR] " + message);
+    }
+
+    default void logInfo(String message) {
+        log("[INFO] " + message);
+    }
+}
+```
+
+### 5. static Methods in Interfaces
+
+```java
+public interface MathUtils {
+    static double clamp(double value, double min, double max) {
+        return Math.max(min, Math.min(max, value));
+    }
+}
+
+// Usage:
+double result = MathUtils.clamp(150, 0, 100);  // 100.0
+```
+
+### 6. Functional Interfaces (1 abstract method)
+
+An interface with exactly one abstract method can be used with **lambda expressions**.
+
+```java
+@FunctionalInterface
+public interface Validator {
+    boolean validate(String input);
+}
+
+// Lambda usage:
+Validator emailCheck = email -> email.contains("@");
+System.out.println(emailCheck.validate("user@example.com")); // true
+```
+
+## Full Example
+
+```java
+public class InterfaceDemo {
+    interface Payable {
+        double calculatePay();
+        default String paymentSummary() {
+            return String.format("Pay: $%.2f", calculatePay());
+        }
+    }
+
+    interface Taxable {
+        double TAX_RATE = 0.20;   // implicitly public static final
+        double calculateTax();
+    }
+
+    static class Employee implements Payable, Taxable {
+        private String name;
+        private double hourlyRate;
+        private int hoursWorked;
+
+        public Employee(String name, double hourlyRate, int hoursWorked) {
+            this.name = name;
+            this.hourlyRate = hourlyRate;
+            this.hoursWorked = hoursWorked;
+        }
+
+        @Override public double calculatePay() { return hourlyRate * hoursWorked; }
+        @Override public double calculateTax() { return calculatePay() * TAX_RATE; }
+
+        public void printSlip() {
+            System.out.println("Employee: " + name);
+            System.out.println(paymentSummary());
+            System.out.printf("Tax (20%%): $%.2f%n", calculateTax());
+            System.out.printf("Net:       $%.2f%n", calculatePay() - calculateTax());
+            System.out.println("---");
+        }
+    }
+
+    public static void main(String[] args) {
+        Employee[] staff = {
+            new Employee("Alice", 30.0, 160),
+            new Employee("Bob",   25.0, 120)
+        };
+        for (Employee e : staff) e.printSlip();
+    }
+}
+```
+
+**Expected output:**
+```
+Employee: Alice
+Pay: $4800.00
+Tax (20%): $960.00
+Net:       $3840.00
+---
+Employee: Bob
+Pay: $3000.00
+Tax (20%): $600.00
+Net:       $2400.00
+---
 ```
 
 ## Exercise
 
-1. Write a short program that uses today's topic.
-2. Change one value and predict the output before running.
-3. Explain the result in your own words (2–3 sentences).
+1. Create a `Sortable` interface with methods `sortAscending()` and `sortDescending()`. Implement it in a `NumberList` class.
+2. Create a `Playable` interface for a media player (play, pause, stop, seek). Implement it in `AudioPlayer` and `VideoPlayer` classes.
+3. Write a `@FunctionalInterface` called `StringTransformer` and use it with lambdas to reverse, uppercase, and remove spaces from strings.
 
 ## Checkpoint
 
-You are ready for the next lesson when you can solve the exercise without copying the example.
+You are ready for the next lesson when you can:
+- Implement two interfaces in one class
+- Explain when to choose an interface over an abstract class
+- Write a default method in an interface
 
 ---
 

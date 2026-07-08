@@ -2,28 +2,143 @@
 
 **Module 01 · Beginner · Lesson 06 of 10**
 
+## Learning Objectives
 
-## Learning objectives
-
-- Understand **methods** in Java
-- Read and write small examples you can run locally
-- Connect this topic to the next lesson in the course
+- Define and call methods with parameters and return values
+- Understand method overloading
+- Know the difference between `void` and non-void methods
 
 ## Overview
 
-Methods is a core topic on the PolyCode **Java Certificate Course** path. Work through the examples, then try the exercise before moving on.
+A **method** is a named block of code that performs a specific task. Instead of writing the same logic repeatedly, you write it once as a method and call it whenever needed. Methods make code **reusable**, **readable**, and **easier to test**.
 
-## Key concepts
+## Key Concepts
 
-1. **Syntax and structure** — how Java expresses this idea clearly
-2. **Common patterns** — what you will see in real projects
-3. **Mistakes to avoid** — typical beginner errors and fixes
-
-## Example
+### 1. Method Anatomy
 
 ```java
-// Methods — practice sketch
-// add your code here
+// accessModifier returnType methodName(parameterList) { body }
+public static int add(int a, int b) {
+    return a + b;
+}
+```
+
+| Part | Meaning |
+|------|---------|
+| `public` | Callable from anywhere |
+| `static` | Can be called without creating an object |
+| `int` | Return type (use `void` if nothing is returned) |
+| `add` | Method name (use camelCase) |
+| `int a, int b` | Parameters (inputs) |
+| `return a + b` | Return value |
+
+### 2. void Methods (no return value)
+
+```java
+public static void greet(String name) {
+    System.out.println("Hello, " + name + "!");
+}
+
+// Calling it:
+greet("Alice");   // Hello, Alice!
+```
+
+### 3. Methods with Return Values
+
+```java
+public static double circleArea(double radius) {
+    return Math.PI * radius * radius;
+}
+
+// Calling it:
+double area = circleArea(5.0);
+System.out.printf("Area: %.2f%n", area);  // Area: 78.54
+```
+
+### 4. Method Overloading
+
+Multiple methods can share the same name if their **parameter lists differ** (different types or number of parameters).
+
+```java
+public static int multiply(int a, int b) {
+    return a * b;
+}
+
+public static double multiply(double a, double b) {
+    return a * b;
+}
+
+public static int multiply(int a, int b, int c) {
+    return a * b * c;
+}
+
+// Java picks the right one automatically:
+multiply(3, 4);           // calls int version → 12
+multiply(2.5, 4.0);       // calls double version → 10.0
+multiply(2, 3, 4);        // calls 3-parameter version → 24
+```
+
+### 5. Parameters vs Arguments
+
+- **Parameter**: variable in the method definition (`int a`)
+- **Argument**: actual value passed when calling (`add(5, 3)` — here `5` and `3` are arguments)
+
+### 6. Scope
+
+Variables declared inside a method only exist inside that method.
+
+```java
+public static void example() {
+    int local = 10;    // only visible inside example()
+}
+// System.out.println(local); ← compile error! local doesn't exist here
+```
+
+## Full Example
+
+```java
+public class MethodsDemo {
+
+    public static int max(int a, int b) {
+        return (a > b) ? a : b;
+    }
+
+    public static boolean isPrime(int n) {
+        if (n < 2) return false;
+        for (int i = 2; i <= Math.sqrt(n); i++) {
+            if (n % i == 0) return false;
+        }
+        return true;
+    }
+
+    public static String repeat(String text, int times) {
+        StringBuilder sb = new StringBuilder();
+        for (int i = 0; i < times; i++) {
+            sb.append(text);
+        }
+        return sb.toString();
+    }
+
+    public static void main(String[] args) {
+        System.out.println("Max of 17 and 42: " + max(17, 42));
+
+        System.out.println("Primes up to 30:");
+        for (int i = 2; i <= 30; i++) {
+            if (isPrime(i)) System.out.print(i + " ");
+        }
+        System.out.println();
+
+        System.out.println(repeat("Java! ", 3));
+    }
+}
+```
+
+**Expected output:**
+```
+Max of 17 and 42: 42
+Primes up to 30:
+2 3 5 7 11 13 17 19 23 29
+Java! Java! Java!
 ```
 
 ## Exercise
