@@ -2,39 +2,187 @@
 
 **Module 02 · Intermediate · Lesson 06 of 06**
 
+## Learning Objectives
 
-## Learning objectives
-
-- Understand **file i/o** in Java
-- Read and write small examples you can run locally
-- Connect this topic to the next lesson in the course
+- Read and write text files using `BufferedReader` / `BufferedWriter`
+- Use the modern `Files` API (Java 11+)
+- Handle file exceptions correctly
 
 ## Overview
 
-File I/O is a core topic on the PolyCode **Java Certificate Course** path. Work through the examples, then try the exercise before moving on.
+Real applications constantly read config files, write logs, and process data files. Java provides two approaches: the classic `java.io` streams and the modern `java.nio.file.Files` API. The modern API is simpler for most tasks.
 
-## Key concepts
+## Key Concepts
 
-1. **Syntax and structure** — how Java expresses this idea clearly
-2. **Common patterns** — what you will see in real projects
-3. **Mistakes to avoid** — typical beginner errors and fixes
-
-## Example
+### 1. Writing a File (Modern API)
 
 ```java
-// File I/O — practice sketch
-// add your code here
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.util.List;
+
+Path file = Path.of("students.txt");
+
+List<String> lines = List.of(
+    "Alice, 92",
+    "Bob, 85",
+    "Charlie, 78"
+);
+
+Files.write(file, lines);   // creates or overwrites the file
+System.out.println("File written: " + file.toAbsolutePath());
+```
+
+### 2. Reading a File (Modern API)
+
+```java
+// Read all lines at once
+List<String> lines = Files.readAllLines(Path.of("students.txt"));
+for (String line : lines) {
+    System.out.println(line);
+}
+
+// Read entire file as a single String (Java 11+)
+String content = Files.readString(Path.of("students.txt"));
+System.out.println(content);
+```
+
+### 3. Appending to a File
+
+```java
+import java.nio.file.StandardOpenOption;
+
+Files.writeString(
+    Path.of("log.txt"),
+    "New log entry\n",
+    StandardOpenOption.CREATE,
+    StandardOpenOption.APPEND
+);
+```
+
+### 4. Classic BufferedReader / BufferedWriter
+
+Useful for large files — reads line by line without loading everything into memory.
+
+```java
+import java.io.*;
+
+// Writing
+try (BufferedWriter writer = new BufferedWriter(new FileWriter("output.txt"))) {
+    writer.write("Line 1");
+    writer.newLine();
+    writer.write("Line 2");
+}
+
+// Reading
+try (BufferedReader reader = new BufferedReader(new FileReader("output.txt"))) {
+    String line;
+    while ((line = reader.readLine()) != null) {
+        System.out.println(line);
+    }
+}
+```
+
+### 5. Checking and Managing Files
+
+```java
+Path p = Path.of("data.txt");
+
+Files.exists(p);           // does it exist?
+Files.isReadable(p);       // can we read it?
+Files.size(p);             // size in bytes
+Files.delete(p);           // delete it
+Files.copy(p, Path.of("backup.txt"));   // copy
+Files.move(p, Path.of("archive/data.txt"));  // move/rename
+```
+
+### 6. Working with Directories
+
+```java
+Path dir = Path.of("reports");
+Files.createDirectories(dir);   // create dir (and parents)
+
+// List all files in a directory
+Files.list(dir).forEach(System.out::println);
+
+// Walk entire directory tree
+Files.walk(dir)
+     .filter(f -> f.toString().endsWith(".txt"))
+     .forEach(System.out::println);
+```
+
+## Full Example
+
+```java
+import java.io.*;
+import java.nio.file.*;
+import java.util.*;
+
+public class FileIODemo {
+    record Student(String name, int score) {}
+
+    public static void main(String[] args) throws IOException {
+        Path file = Path.of("scores.csv");
+
+        // 1. Write CSV
+        List<Student> students = List.of(
+            new Student("Alice", 92),
+            new Student("Bob", 85),
+            new Student("Charlie", 78),
+            new Student("Diana", 96)
+        );
+
+        try (BufferedWriter bw = Files.newBufferedWriter(file)) {
+            bw.write("name,score");
+            bw.newLine();
+            for (Student s : students) {
+                bw.write(s.name() + "," + s.score());
+                bw.newLine();
+            }
+        }
+        System.out.println("Written to: " + file.toAbsolutePath());
+
+        // 2. Read back and parse
+        System.out.println("\n--- Student Report ---");
+        int total = 0, count = 0;
+        List<String> lines = Files.readAllLines(file);
+        for (int i = 1; i < lines.size(); i++) {   // skip header
+            String[] parts = lines.get(i).split(",");
+            String name = parts[0];
+            int score = Integer.parseInt(parts[1]);
+            total += score;
+            count++;
+            System.out.printf("%-10s %d%n", name, score);
+        }
+        System.out.printf("Average: %.1f%n", (double) total / count);
+    }
+}
+```
+
+**Expected output:**
+```
+Written to: /home/user/scores.csv
+
+--- Student Report ---
+Alice      92
+Bob        85
+Charlie    78
+Diana      96
+Average: 87.8
 ```
 
 ## Exercise
 
-1. Write a short program that uses today's topic.
-2. Change one value and predict the output before running.
-3. Explain the result in your own words (2–3 sentences).
+1. Write a program that reads a `.txt` file and counts the number of lines, words, and characters (like the Unix `wc` command).
+2. Write a simple CSV parser that reads a file of `name,age,city` records and prints only rows where age > 25.
+3. Create a `Logger` class with a method `log(String message)` that appends a timestamped line to `app.log`.
 
 ## Checkpoint
 
-You are ready for the next lesson when you can solve the exercise without copying the example.
+You are ready for Module 03 when you can:
+- Write and read files using both the classic and modern APIs
+- Append to an existing file without overwriting it
+- Use try-with-resources to safely close file handles
 
 ---
 

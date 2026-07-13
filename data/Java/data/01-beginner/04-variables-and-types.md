@@ -2,39 +2,144 @@
 
 **Module 01 · Beginner · Lesson 04 of 10**
 
+## Learning Objectives
 
-## Learning objectives
-
-- Understand **variables and data types** in Java
-- Read and write small examples you can run locally
-- Connect this topic to the next lesson in the course
+- Declare and initialize variables in Java
+- Know all 8 primitive types and when to use each
+- Understand the difference between primitives and `String`
 
 ## Overview
 
-Variables and Data Types is a core topic on the PolyCode **Java Certificate Course** path. Work through the examples, then try the exercise before moving on.
+Java is **statically typed** — every variable must have a declared type, and that type cannot change. The compiler checks types at compile time, catching many bugs before the program even runs.
 
-## Key concepts
+## Key Concepts
 
-1. **Syntax and structure** — how Java expresses this idea clearly
-2. **Common patterns** — what you will see in real projects
-3. **Mistakes to avoid** — typical beginner errors and fixes
+### 1. The 8 Primitive Types
 
-## Example
+| Type | Size | Range / Use | Example |
+|------|------|-------------|---------|
+| `byte` | 8-bit | -128 to 127 | `byte b = 100;` |
+| `short` | 16-bit | -32,768 to 32,767 | `short s = 1000;` |
+| `int` | 32-bit | ~-2 billion to 2 billion | `int age = 25;` |
+| `long` | 64-bit | Very large integers | `long pop = 8_000_000_000L;` |
+| `float` | 32-bit | Decimal, ~7 digits precision | `float f = 3.14f;` |
+| `double` | 64-bit | Decimal, ~15 digits precision | `double pi = 3.14159;` |
+| `char` | 16-bit | Single Unicode character | `char grade = 'A';` |
+| `boolean` | 1-bit | `true` or `false` | `boolean isJavaFun = true;` |
+
+> **Rule of thumb:** Use `int` for whole numbers, `double` for decimals, `boolean` for yes/no, `char` for single characters.
+
+### 2. Declaring and Initialising Variables
 
 ```java
+// Declare then assign
+int score;
+score = 95;
+
+// Declare and assign in one line (preferred)
+int lives = 3;
+
+// Multiple variables of the same type
+int x = 10, y = 20, z = 30;
+```
+
+### 3. The `long` and `float` Suffixes
+
+```java
+long bigNumber = 9_876_543_210L;  // Must add L for long literals
+float temperature = 36.6f;         // Must add f for float literals
+double price = 19.99;              // No suffix needed for double
+```
+
+### 4. `String` — Not a Primitive
+
+`String` is a class, not a primitive. It holds text and has many useful methods.
+
+```java
+String name = "Alice";
+String greeting = "Hello, " + name + "!";   // Concatenation with +
+int length = name.length();                  // 5
+String upper = name.toUpperCase();           // "ALICE"
+boolean starts = name.startsWith("Al");      // true
+```
+
+### 5. `var` (Java 10+) — Type Inference
+
+```java
+var count = 42;         // compiler infers int
+var message = "Hi";    // compiler infers String
+var pi = 3.14;         // compiler infers double
+```
+
+Use `var` only when the type is obvious from context.
+
+### 6. Constants with `final`
+
+```java
+final double TAX_RATE = 0.18;   // Cannot be changed after assignment
+// TAX_RATE = 0.20;  ← compile error!
+```
+
+## Full Example
+
+```java
+public class VariablesDemo {
+    public static void main(String[] args) {
+        // Primitive types
+        int age = 20;
+        double gpa = 3.85;
+        char grade = 'A';
+        boolean enrolled = true;
+
+        // String
+        String name = "Zara";
+
+        // Constant
+        final int MAX_CREDITS = 20;
+
+        // Output
+        System.out.println("Student: " + name);
+        System.out.println("Age: " + age);
+        System.out.printf("GPA: %.2f%n", gpa);
+        System.out.println("Grade: " + grade);
+        System.out.println("Enrolled: " + enrolled);
+        System.out.println("Max credits allowed: " + MAX_CREDITS);
+
+        // Type limits
+        int maxInt = Integer.MAX_VALUE;
+        System.out.println("Largest int: " + maxInt);
+        System.out.println("Largest int + 1 overflows: " + (maxInt + 1));
+    }
+}
+```
+
+**Expected output:**
+```
+Student: Zara
+Age: 20
+GPA: 3.85
+Grade: A
+Enrolled: true
+Max credits allowed: 20
+Largest int: 2147483647
+Largest int + 1 overflows: -2147483648
 // Variables and Data Types — practice sketch
 // add your code here
 ```
 
 ## Exercise
 
-1. Write a short program that uses today's topic.
-2. Change one value and predict the output before running.
-3. Explain the result in your own words (2–3 sentences).
+1. Declare variables to represent a product: name (String), price (double), quantity (int), inStock (boolean).
+2. Calculate the total cost (`price * quantity`) and store it in a `double`.
+3. Print a receipt-style summary using `printf`.
+4. Make the tax rate (18%) a `final` constant and include tax in the total.
 
 ## Checkpoint
 
-You are ready for the next lesson when you can solve the exercise without copying the example.
+You are ready for the next lesson when you can:
+- Name all 8 primitive types from memory
+- Explain why `long` needs `L` and `float` needs `f`
+- Describe the difference between `int` and `Integer`
 
 ---
 

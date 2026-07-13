@@ -2,146 +2,133 @@
 
 **Module 01 · Beginner · Lesson 02 of 10**
 
+## Learning Objectives
 
-## Learning objectives
-
-- Understand **java basics and syntax** in Java
-- Read and write small examples you can run locally
-- Connect this topic to the next lesson in the course
+- Understand the structure of a Java program
+- Know the difference between compiled and interpreted languages
+- Write and read basic Java syntax correctly
 
 ## Overview
 
-Java Basics and Syntax is a core topic on the PolyCode **Java Certificate Course** path. Work through the examples, then try the exercise before moving on.
+Java is a **compiled, statically-typed, object-oriented** language. Before your code runs, the Java compiler (`javac`) converts it into **bytecode** (`.class` files), which the Java Virtual Machine (JVM) then executes. This is what makes Java "write once, run anywhere."
 
-## Key concepts
+Every Java program starts inside a **class**, and execution begins from a special method called `main`.
 
-1. **Syntax and structure** — how Java expresses this idea clearly
-2. **Common patterns** — what you will see in real projects
-3. **Mistakes to avoid** — typical beginner errors and fixes
+## Key Concepts
 
-## Example
+### 1. Program Structure
+
+Every Java file must have:
+- A **class** whose name matches the filename exactly
+- A `main` method as the entry point
 
 ```java
-// Java Basics and Syntax — practice sketch
-// add your code here
+// File: MyProgram.java
+public class MyProgram {
+    public static void main(String[] args) {
+        System.out.println("Hello from Java!");
+    }
+}
+```
+
+| Part | Meaning |
+|------|---------|
+| `public` | Accessible from anywhere |
+| `class MyProgram` | Defines a class named MyProgram |
+| `static` | Belongs to the class, not an object |
+| `void` | Returns nothing |
+| `String[] args` | Command-line arguments |
+
+### 2. Statements and Semicolons
+
+Every statement in Java **must end with a semicolon** `;`. Forgetting it is the most common beginner mistake.
+
+```java
+System.out.println("This works");   // ✅ correct
+System.out.println("This fails")    // ❌ missing semicolon
+```
+
+### 3. Comments
+
+```java
+// Single-line comment
+
+/*
+   Multi-line comment
+   spans multiple lines
+*/
+
+/**
+ * Javadoc comment — used to generate documentation
+ * @param name the name to greet
+ */
+```
+
+### 4. Case Sensitivity
+
+Java is **case-sensitive**. `Main`, `main`, and `MAIN` are three different things.
+
+```java
+String name = "Alice";   // ✅
+String Name = "Bob";     // This is a DIFFERENT variable
+```
+
+### 5. Printing Output
+
+```java
+System.out.println("Prints with newline at end");
+System.out.print("Prints WITHOUT newline");
+System.out.printf("Formatted: name=%s, age=%d%n", "Alice", 25);
+```
+
+## Full Example
+
+```java
+public class JavaBasics {
+    public static void main(String[] args) {
+        // Print a greeting
+        System.out.println("=== Java Basics Demo ===");
+
+        // Variables
+        int year = 2024;
+        String language = "Java";
+
+        // Formatted output
+        System.out.printf("%s was created in 1995. Current year: %d%n", language, year);
+
+        // Math
+        int a = 10, b = 3;
+        System.out.println("Sum: " + (a + b));
+        System.out.println("Division: " + (a / b));      // Integer division = 3
+        System.out.println("Remainder: " + (a % b));     // 1
+        System.out.println("Float div: " + (a / (double) b)); // 3.333...
+    }
+}
+```
+
+**Expected output:**
+```
+=== Java Basics Demo ===
+Java was created in 1995. Current year: 2024
+Sum: 13
+Division: 3
+Remainder: 1
+Float div: 3.3333333333333335
 ```
 
 ## Exercise
 
-1. Write a short program that uses today's topic.
-2. Change one value and predict the output before running.
-3. Explain the result in your own words (2–3 sentences).
+1. Create a file `AboutMe.java` with a class named `AboutMe`.
+2. In `main`, print your name, age, and favourite programming concept on separate lines.
+3. Use `printf` to format at least one line.
+4. Add a comment explaining what each `System.out` call does.
 
 ## Checkpoint
 
-You are ready for the next lesson when you can solve the exercise without copying the example.
+You are ready for the next lesson when you can:
+- Explain why the filename must match the class name
+- Fix a "missing semicolon" error on sight
+- Use both `println` and `printf` correctly
 
 ---
-
-**Next:** Continue to lesson 03 in this module.
-
----
-
-## Additional reference
-
-# Java Syntax Basics
-
-Every Java program follows the same basic shape. Understanding this shape makes every later lesson easier, because you'll recognize the pattern instead of memorizing each example separately.
-
-## Anatomy of a Java file
-
-```java
-// 1. (optional) package declaration — must be the very first line if present
-package com.example.myapp;
-
-// 2. (optional) imports — bring in classes from other packages
-import java.util.Scanner;
-
-// 3. a class declaration — the file's main container
-public class MyProgram {
-
-    // 4. the main method — where execution starts
-    public static void main(String[] args) {
-        // 5. statements — the actual instructions
-        int x = 5;
-        System.out.println(x);
-    }
-}
-```
-
-A **class** must match the filename for `public` classes: `MyProgram` must live in `MyProgram.java`.
-
-## Statements and blocks
-
-A **statement** is one instruction, always ending in a semicolon `;`:
-
-```java
-int total = 10;
-System.out.println(total);
-```
-
-A **block** is a group of statements wrapped in curly braces `{ }` — used for class bodies, method bodies, loops, and conditionals:
-
-```java
-if (total > 5) {
-    System.out.println("Big");
-    System.out.println("Number");
-}
-```
-
-Java ignores extra whitespace and line breaks; only the braces and semicolons define structure. That's the opposite of Python, where indentation itself defines blocks.
-
-## Identifiers and naming conventions
-
-An **identifier** is any name you give to a class, variable, or method. Rules:
-
-- Can contain letters, digits, `_`, and `$`
-- Cannot start with a digit
-- Cannot be a reserved keyword (`class`, `int`, `if`, etc.)
-- Case-sensitive: `age` and `Age` are different identifiers
-
-Conventions (not enforced by the compiler, but expected in real code):
-
-| Element | Convention | Example |
-|---|---|---|
-| Class | `PascalCase` | `BankAccount` |
-| Method / variable | `camelCase` | `calculateTotal`, `userName` |
-| Constant | `ALL_CAPS` | `MAX_SIZE` |
-| Package | `lowercase.dotted` | `com.example.app` |
-
-## Keywords
-
-Reserved words you can't use as identifiers: `class`, `public`, `private`, `static`, `void`, `int`, `double`, `boolean`, `if`, `else`, `for`, `while`, `return`, `new`, `import`, `package`, `try`, `catch`, and others covered in later lessons.
-
-## A complete minimal example
-
-```java
-public class Basics {
-    public static void main(String[] args) {
-        int age = 21;             // a variable
-        String name = "Sara";     // another variable
-
-        if (age >= 18) {
-            System.out.println(name + " is an adult.");
-        } else {
-            System.out.println(name + " is a minor.");
-        }
-    }
-}
-```
-
-**Output:**
-```
-Sara is an adult.
-```
-
-## Case sensitivity matters
-
-```java
-int score = 10;
-// int Score = 5;  // this would be a DIFFERENT variable, not a typo
-```
-
-Mixing up `Score` and `score` is a very common beginner bug — the compiler treats them as two unrelated variables.
-
-> 💡 **Key tip:** When something won't compile, check semicolons and braces first. A missing `;` or an unmatched `{` is the single most common beginner error in Java.
+**Next:** Lesson 03 — Hello World and Running Your First Program

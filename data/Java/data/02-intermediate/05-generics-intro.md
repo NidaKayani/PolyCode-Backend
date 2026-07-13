@@ -1,40 +1,194 @@
-# Lesson 05 — Generics Introduction
+# Lesson 05 — Generics
 
 **Module 02 · Intermediate · Lesson 05 of 06**
 
+## Learning Objectives
 
-## Learning objectives
-
-- Understand **generics introduction** in Java
-- Read and write small examples you can run locally
-- Connect this topic to the next lesson in the course
+- Write generic classes and methods
+- Use bounded type parameters (`extends`, `super`)
+- Understand wildcards `<?>`
 
 ## Overview
 
-Generics Introduction is a core topic on the PolyCode **Java Certificate Course** path. Work through the examples, then try the exercise before moving on.
+**Generics** let you write code that works with any type while keeping **compile-time type safety**. Instead of writing a `StringBox`, `IntBox`, and `DoublBox` separately, you write one `Box<T>` that works for all. This is how all Java collections (like `ArrayList<T>`) are built.
 
-## Key concepts
+## Key Concepts
 
-1. **Syntax and structure** — how Java expresses this idea clearly
-2. **Common patterns** — what you will see in real projects
-3. **Mistakes to avoid** — typical beginner errors and fixes
-
-## Example
+### 1. Generic Class
 
 ```java
-// Generics Introduction — practice sketch
-// add your code here
+public class Box<T> {
+    private T value;
+
+    public Box(T value) { this.value = value; }
+    public T getValue() { return value; }
+    public void setValue(T value) { this.value = value; }
+
+    @Override
+    public String toString() { return "Box[" + value + "]"; }
+}
+
+// Usage:
+Box<String> strBox = new Box<>("Hello");
+Box<Integer> intBox = new Box<>(42);
+Box<Double> dblBox = new Box<>(3.14);
+
+System.out.println(strBox.getValue().toUpperCase()); // HELLO
+System.out.println(intBox.getValue() * 2);           // 84
+```
+
+### 2. Multiple Type Parameters
+
+```java
+public class Pair<A, B> {
+    private A first;
+    private B second;
+
+    public Pair(A first, B second) { this.first = first; this.second = second; }
+    public A getFirst() { return first; }
+    public B getSecond() { return second; }
+
+    @Override
+    public String toString() { return "(" + first + ", " + second + ")"; }
+}
+
+Pair<String, Integer> person = new Pair<>("Alice", 30);
+System.out.println(person);  // (Alice, 30)
+```
+
+### 3. Generic Methods
+
+```java
+public static <T> T getMiddle(T[] array) {
+    return array[array.length / 2];
+}
+
+String[] names = {"Alice", "Bob", "Charlie", "Dave"};
+System.out.println(getMiddle(names));   // Bob
+
+Integer[] nums = {10, 20, 30, 40, 50};
+System.out.println(getMiddle(nums));    // 30
+```
+
+### 4. Bounded Type Parameters
+
+Restrict `T` to a specific type or its subtypes:
+
+```java
+// T must be a Number or subclass (Integer, Double, etc.)
+public static <T extends Number> double sum(List<T> list) {
+    double total = 0;
+    for (T item : list) {
+        total += item.doubleValue();
+    }
+    return total;
+}
+
+System.out.println(sum(List.of(1, 2, 3, 4, 5)));        // 15.0
+System.out.println(sum(List.of(1.1, 2.2, 3.3)));        // 6.6
+// sum(List.of("a", "b"));  ← compile error! String is not a Number
+```
+
+### 5. Wildcards
+
+```java
+// Unknown type — read-only
+public static void printList(List<?> list) {
+    for (Object item : list) System.out.println(item);
+}
+
+// Upper bound wildcard — anything extending Number
+public static double sumList(List<? extends Number> list) {
+    double total = 0;
+    for (Number n : list) total += n.doubleValue();
+    return total;
+}
+
+// Lower bound wildcard — Number or its supertypes
+public static void addNumbers(List<? super Integer> list) {
+    list.add(10);
+    list.add(20);
+}
+```
+
+## Full Example
+
+```java
+import java.util.ArrayList;
+import java.util.List;
+
+public class GenericsDemo {
+    // Generic stack implementation
+    static class Stack<T> {
+        private List<T> items = new ArrayList<>();
+
+        public void push(T item) { items.add(item); }
+
+        public T pop() {
+            if (isEmpty()) throw new RuntimeException("Stack is empty");
+            return items.remove(items.size() - 1);
+        }
+
+        public T peek() {
+            if (isEmpty()) throw new RuntimeException("Stack is empty");
+            return items.get(items.size() - 1);
+        }
+
+        public boolean isEmpty() { return items.isEmpty(); }
+        public int size() { return items.size(); }
+
+        @Override
+        public String toString() { return items.toString(); }
+    }
+
+    // Generic method with bound
+    static <T extends Comparable<T>> T findMax(List<T> list) {
+        T max = list.get(0);
+        for (T item : list) {
+            if (item.compareTo(max) > 0) max = item;
+        }
+        return max;
+    }
+
+    public static void main(String[] args) {
+        // String stack
+        Stack<String> history = new Stack<>();
+        history.push("page1.html");
+        history.push("page2.html");
+        history.push("page3.html");
+        System.out.println("History: " + history);
+        System.out.println("Back: " + history.pop());
+        System.out.println("Current: " + history.peek());
+
+        // Generic findMax
+        System.out.println("\nMax int: " + findMax(List.of(3, 7, 1, 9, 4)));
+        System.out.println("Max str: " + findMax(List.of("banana", "apple", "cherry")));
+    }
+}
+```
+
+**Expected output:**
+```
+History: [page1.html, page2.html, page3.html]
+Back: page3.html
+Current: page2.html
+
+Max int: 9
+Max str: cherry
 ```
 
 ## Exercise
 
-1. Write a short program that uses today's topic.
-2. Change one value and predict the output before running.
-3. Explain the result in your own words (2–3 sentences).
+1. Create a generic `Result<T>` class that holds either a value or an error message (like Kotlin's Result type). It should have methods `isSuccess()`, `getValue()`, `getError()`.
+2. Write a generic `swap(T[] array, int i, int j)` method that swaps two elements.
+3. Write a bounded generic method `<T extends Comparable<T>> List<T> filterGreaterThan(List<T> list, T threshold)`.
 
 ## Checkpoint
 
-You are ready for the next lesson when you can solve the exercise without copying the example.
+You are ready for the next lesson when you can:
+- Write a generic class with a type parameter
+- Explain what `<T extends Comparable<T>>` means
+- Describe when to use `? extends` vs `? super`
 
 ---
 

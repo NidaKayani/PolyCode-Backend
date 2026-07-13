@@ -1,44 +1,185 @@
-# Lesson 08 — Classes Introduction
+# Lesson 08 — Introduction to Classes and Objects
 
 **Module 01 · Beginner · Lesson 08 of 10**
 
+## Learning Objectives
 
-## Learning objectives
-
-- Understand **classes introduction** in Java
-- Read and write small examples you can run locally
-- Connect this topic to the next lesson in the course
+- Define a class with fields, constructors, and methods
+- Create objects and call their methods
+- Understand the `this` keyword
 
 ## Overview
 
-Classes Introduction is a core topic on the PolyCode **Java Certificate Course** path. Work through the examples, then try the exercise before moving on.
+Java is an **object-oriented language**. A **class** is a blueprint, and an **object** is a real instance created from that blueprint. For example, `Car` is a class; your red Toyota is an object.
 
-## Key concepts
+Classes bundle related **data** (fields) and **behaviour** (methods) together — this is called **encapsulation**.
 
-1. **Syntax and structure** — how Java expresses this idea clearly
-2. **Common patterns** — what you will see in real projects
-3. **Mistakes to avoid** — typical beginner errors and fixes
+## Key Concepts
 
-## Example
+### 1. Defining a Class
 
 ```java
-// Classes Introduction — practice sketch
-// add your code here
+public class Dog {
+    // Fields (data)
+    String name;
+    String breed;
+    int age;
+
+    // Constructor (called when creating an object)
+    public Dog(String name, String breed, int age) {
+        this.name = name;
+        this.breed = breed;
+        this.age = age;
+    }
+
+    // Method (behaviour)
+    public void bark() {
+        System.out.println(name + " says: Woof!");
+    }
+
+    public String describe() {
+        return name + " is a " + age + "-year-old " + breed;
+    }
+}
+```
+
+### 2. Creating Objects
+
+```java
+// new ClassName(constructor arguments)
+Dog rex = new Dog("Rex", "German Shepherd", 3);
+Dog buddy = new Dog("Buddy", "Golden Retriever", 5);
+
+rex.bark();                    // Rex says: Woof!
+System.out.println(buddy.describe()); // Buddy is a 5-year-old Golden Retriever
+```
+
+### 3. The `this` Keyword
+
+`this` refers to the **current object**. It's used when a parameter name shadows a field name.
+
+```java
+public Dog(String name, int age) {
+    this.name = name;   // this.name = field, name = parameter
+    this.age = age;
+}
+```
+
+### 4. Multiple Constructors (Constructor Overloading)
+
+```java
+public class Dog {
+    String name;
+    int age;
+
+    // Full constructor
+    public Dog(String name, int age) {
+        this.name = name;
+        this.age = age;
+    }
+
+    // Default age constructor
+    public Dog(String name) {
+        this(name, 1);  // calls the full constructor
+    }
+}
+
+Dog puppy = new Dog("Max");       // age defaults to 1
+Dog adult = new Dog("Rex", 4);
+```
+
+### 5. Getters and Setters (best practice)
+
+Fields should be `private`, accessed through public methods.
+
+```java
+public class Person {
+    private String name;   // private — hidden from outside
+    private int age;
+
+    public Person(String name, int age) {
+        this.name = name;
+        this.age = age;
+    }
+
+    // Getter
+    public String getName() { return name; }
+    public int getAge() { return age; }
+
+    // Setter with validation
+    public void setAge(int age) {
+        if (age >= 0) this.age = age;
+    }
+}
+```
+
+## Full Example
+
+```java
+public class BankAccount {
+    private String owner;
+    private double balance;
+
+    public BankAccount(String owner, double initialBalance) {
+        this.owner = owner;
+        this.balance = initialBalance;
+    }
+
+    public void deposit(double amount) {
+        if (amount > 0) {
+            balance += amount;
+            System.out.printf("Deposited %.2f. New balance: %.2f%n", amount, balance);
+        }
+    }
+
+    public void withdraw(double amount) {
+        if (amount > balance) {
+            System.out.println("Insufficient funds!");
+        } else {
+            balance -= amount;
+            System.out.printf("Withdrawn %.2f. New balance: %.2f%n", amount, balance);
+        }
+    }
+
+    public void printStatement() {
+        System.out.printf("[%s] Balance: $%.2f%n", owner, balance);
+    }
+
+    public static void main(String[] args) {
+        BankAccount acc = new BankAccount("Alice", 1000.00);
+        acc.printStatement();
+        acc.deposit(500.00);
+        acc.withdraw(200.00);
+        acc.withdraw(2000.00);   // insufficient
+        acc.printStatement();
+    }
+}
+```
+
+**Expected output:**
+```
+[Alice] Balance: $1000.00
+Deposited 500.00. New balance: $1500.00
+Withdrawn 200.00. New balance: $1300.00
+Insufficient funds!
+[Alice] Balance: $1300.00
 ```
 
 ## Exercise
 
-1. Write a short program that uses today's topic.
-2. Change one value and predict the output before running.
-3. Explain the result in your own words (2–3 sentences).
+1. Create a `Rectangle` class with `width` and `height` fields, a constructor, and methods `area()` and `perimeter()`.
+2. Create a `Student` class with `name`, `id`, and `grades` (array). Add a method `average()` that returns the average grade.
+3. Add private fields and public getters/setters to both classes.
 
 ## Checkpoint
 
-You are ready for the next lesson when you can solve the exercise without copying the example.
+You are ready for the next lesson when you can:
+- Write a class from scratch with fields, constructor, and methods
+- Explain why fields should be `private`
+- Use `this` correctly
 
 ---
-
-**Next:** Continue to lesson 09 in this module.
+**Next:** Lesson 09 — Strings
 
 ---
 

@@ -1,40 +1,213 @@
 # Lesson 01 — Spring Boot Introduction
 
-**Module 04 · Professional · Lesson 01 of 06**
+**Module 04 · Professional · Lesson 01 of 05**
 
+## Learning Objectives
 
-## Learning objectives
-
-- Understand **spring boot introduction** in Java
-- Read and write small examples you can run locally
-- Connect this topic to the next lesson in the course
+- Create a Spring Boot project and run it
+- Understand auto-configuration and the application context
+- Build your first REST endpoint
 
 ## Overview
 
-Spring Boot Introduction is a core topic on the PolyCode **Java Certificate Course** path. Work through the examples, then try the exercise before moving on.
+**Spring Boot** is the industry-standard way to build Java backend applications. It eliminates boilerplate by auto-configuring everything based on what's on your classpath. A production-ready web server starts with a single `main` method.
 
-## Key concepts
+## Key Concepts
 
-1. **Syntax and structure** — how Java expresses this idea clearly
-2. **Common patterns** — what you will see in real projects
-3. **Mistakes to avoid** — typical beginner errors and fixes
+### 1. Project Setup (Spring Initializr)
 
-## Example
+Go to **https://start.spring.io** and select:
+- **Project:** Maven  
+- **Language:** Java  
+- **Spring Boot:** 3.x  
+- **Dependencies:** Spring Web, Spring Data JPA, H2 Database (for dev)
+
+Download and open in IntelliJ or VS Code.
+
+Your `pom.xml` key dependencies:
+```xml
+<dependencies>
+    <dependency>
+        <groupId>org.springframework.boot</groupId>
+        <artifactId>spring-boot-starter-web</artifactId>
+    </dependency>
+    <dependency>
+        <groupId>org.springframework.boot</groupId>
+        <artifactId>spring-boot-starter-data-jpa</artifactId>
+    </dependency>
+    <dependency>
+        <groupId>com.h2database</groupId>
+        <artifactId>h2</artifactId>
+        <scope>runtime</scope>
+    </dependency>
+</dependencies>
+```
+
+### 2. The Entry Point
 
 ```java
-// Spring Boot Introduction — practice sketch
-// add your code here
+@SpringBootApplication   // = @Configuration + @EnableAutoConfiguration + @ComponentScan
+public class MyApp {
+    public static void main(String[] args) {
+        SpringApplication.run(MyApp.class, args);
+        // Starts embedded Tomcat on port 8080
+    }
+}
+```
+
+### 3. Your First REST Controller
+
+```java
+import org.springframework.web.bind.annotation.*;
+
+@RestController                // = @Controller + @ResponseBody
+@RequestMapping("/api")
+public class HelloController {
+
+    @GetMapping("/hello")
+    public String hello() {
+        return "Hello from Spring Boot!";
+    }
+
+    @GetMapping("/hello/{name}")
+    public String greet(@PathVariable String name) {
+        return "Hello, " + name + "!";
+    }
+
+    @GetMapping("/add")
+    public int add(@RequestParam int a, @RequestParam int b) {
+        return a + b;
+    }
+}
+```
+
+Access at:
+- `GET http://localhost:8080/api/hello` → `Hello from Spring Boot!`
+- `GET http://localhost:8080/api/hello/Alice` → `Hello, Alice!`
+- `GET http://localhost:8080/api/add?a=5&b=3` → `8`
+
+### 4. Returning JSON
+
+Spring Boot automatically converts Java objects to JSON using Jackson.
+
+```java
+public record Product(int id, String name, double price) {}
+
+@GetMapping("/product")
+public Product getProduct() {
+    return new Product(1, "Laptop", 999.99);
+}
+// Response: {"id":1,"name":"Laptop","price":999.99}
+
+@GetMapping("/products")
+public List<Product> getAll() {
+    return List.of(
+        new Product(1, "Laptop", 999.99),
+        new Product(2, "Mouse",  29.99)
+    );
+}
+```
+
+### 5. application.properties
+
+```properties
+# src/main/resources/application.properties
+server.port=8080
+spring.application.name=my-app
+
+# H2 in-memory database
+spring.datasource.url=jdbc:h2:mem:testdb
+spring.h2.console.enabled=true
+spring.jpa.show-sql=true
+```
+
+### 6. Dependency Injection with @Autowired / Constructor Injection
+
+```java
+@Service
+public class ProductService {
+    public List<String> getAllNames() {
+        return List.of("Laptop", "Mouse", "Keyboard");
+    }
+}
+
+@RestController
+@RequestMapping("/api")
+public class ProductController {
+    private final ProductService productService;
+
+    // Constructor injection (preferred over @Autowired on field)
+    public ProductController(ProductService productService) {
+        this.productService = productService;
+    }
+
+    @GetMapping("/names")
+    public List<String> names() {
+        return productService.getAllNames();
+    }
+}
+```
+
+## Full Example — Mini REST API
+
+```java
+// Model
+public record Student(Long id, String name, int score) {}
+
+// Service
+@Service
+public class StudentService {
+    private final List<Student> students = new ArrayList<>(List.of(
+        new Student(1L, "Alice", 92),
+        new Student(2L, "Bob",   85),
+        new Student(3L, "Diana", 96)
+    ));
+
+    public List<Student> getAll()           { return students; }
+    public Optional<Student> getById(Long id) {
+        return students.stream().filter(s -> s.id().equals(id)).findFirst();
+    }
+}
+
+// Controller
+@RestController
+@RequestMapping("/api/students")
+public class StudentController {
+    private final StudentService service;
+
+    public StudentController(StudentService service) { this.service = service; }
+
+    @GetMapping
+    public List<Student> all() { return service.getAll(); }
+
+    @GetMapping("/{id}")
+    public ResponseEntity<Student> byId(@PathVariable Long id) {
+        return service.getById(id)
+            .map(ResponseEntity::ok)
+            .orElse(ResponseEntity.notFound().build());
+    }
+}
+```
+
+Test with:
+```
+GET http://localhost:8080/api/students       → all students
+GET http://localhost:8080/api/students/2     → Bob
+GET http://localhost:8080/api/students/99    → 404 Not Found
 ```
 
 ## Exercise
 
-1. Write a short program that uses today's topic.
-2. Change one value and predict the output before running.
-3. Explain the result in your own words (2–3 sentences).
+1. Add a `@PostMapping` endpoint that accepts a `Student` JSON body and adds it to the list.
+2. Add a `@DeleteMapping("/{id}")` that removes a student by ID.
+3. Add a `@GetMapping("/top")` that returns only students with score ≥ 90.
 
 ## Checkpoint
 
-You are ready for the next lesson when you can solve the exercise without copying the example.
+You are ready for the next lesson when you can:
+- Run a Spring Boot app and hit an endpoint in a browser
+- Explain the difference between `@RestController` and `@Controller`
+- Use `@PathVariable`, `@RequestParam`, and `@RequestBody`
 
 ---
 

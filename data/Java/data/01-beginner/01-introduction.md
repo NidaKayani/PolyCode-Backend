@@ -19,30 +19,8 @@ Introduction to Java is a core topic on the PolyCode **Java Certificate Course**
 2. **Common patterns** — what you will see in real projects
 3. **Mistakes to avoid** — typical beginner errors and fixes
 
-## Example
 
-```java
-// Introduction to Java — practice sketch
-// add your code here
-```
-
-## Exercise
-
-1. Write a short program that uses today's topic.
-2. Change one value and predict the output before running.
-3. Explain the result in your own words (2–3 sentences).
-
-## Checkpoint
-
-You are ready for the next lesson when you can solve the exercise without copying the example.
-
----
-
-**Next:** Continue to lesson 02 in this module.
-
----
-
-## Additional reference
+## Reference
 
 # What is Java?
 
