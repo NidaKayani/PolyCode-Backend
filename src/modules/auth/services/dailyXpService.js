@@ -86,15 +86,17 @@ async function recordDailyXp(userId, payload = {}) {
   let day = progress.days.find((entry) => entry.dateKey === dateKey);
 
   if (!day) {
-    day = {
+    // push() casts the plain object into a subdocument copy, so grab the
+    // casted subdoc back — mutating the original object would be lost on save.
+    progress.days.push({
       dateKey,
       lessons: [],
       lessonXp: 0,
       readBonusXp: 0,
       read: false,
       readAt: null,
-    };
-    progress.days.push(day);
+    });
+    day = progress.days[progress.days.length - 1];
   }
 
   if (day.lessons.some((lesson) => lesson.lessonId === lessonId)) {
