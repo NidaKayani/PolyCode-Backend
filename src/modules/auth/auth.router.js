@@ -5,6 +5,7 @@ const progressController = require("./controllers/progressController");
 const dailyXpController = require("./controllers/dailyXpController");
 const oopsCppProgressController = require("./controllers/oopsCppProgressController");
 const courseProgressController = require("./controllers/courseProgressController");
+const lessonAnnotationController = require("./controllers/lessonAnnotationController");
 const requireAuth = require("../../middleware/requireAuth");
 
 // ── User Auth Routes ─────────────────────────────────────────────────────────
@@ -196,6 +197,22 @@ router.post(
   "/learn/:courseId/progress/engagement",
   requireAuth,
   courseProgressController.upsertEngagement,
+);
+
+router.get(
+  "/learn/:courseId/annotations/:lessonId",
+  requireAuth,
+  lessonAnnotationController.getAnnotation,
+);
+router.put(
+  "/learn/:courseId/annotations/:lessonId",
+  requireAuth,
+  lessonAnnotationController.putAnnotation,
+);
+router.post(
+  "/learn/annotations/merge",
+  requireAuth,
+  lessonAnnotationController.mergeAnnotations,
 );
 
 // ── Learn: OOP C++ Progress Routes (legacy aliases → shared CourseProgress) ──

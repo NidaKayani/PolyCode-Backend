@@ -111,6 +111,69 @@ async function listProgressForUser(userId, { includePrivate = true } = {}) {
   return docs;
 }
 
+function countQuizAnswers(quizAttempts = {}) {
+  return Object.keys(quizAttempts || {}).length;
+}
+
+function countQuizCorrect(quizAttempts = {}) {
+  let correct = 0;
+  for (const value of Object.values(quizAttempts || {})) {
+    if (value && typeof value === "object" && value.correct === true) {
+      correct += 1;
+    }
+  }
+  return correct;
+}
+
+function normalizeQuizAttemptValue(value) {
+  if (value == null) return null;
+  if (typeof value === "number") {
+    return {
+      selectedIndex: value,
+      correct: null,
+      answeredAt: null,
+    };
+  }
+  if (typeof value === "object") {
+    const selectedIndex =
+      value.selectedIndex !== undefined
+        ? value.selectedIndex
+        : value.selected !== undefined
+          ? value.selected
+          : null;
+    return {
+      selectedIndex,
+      correct:
+        value.correct === undefined || value.correct === null
+          ? null
+          : Boolean(value.correct),
+      answeredAt: value.answeredAt || null,
+    };
+  }
+  return null;
+}
+
+function mergeQuizAttempts(existing = {}, incoming = {}) {
+  const next = { ...(existing || {}) };
+  for (const [key, raw] of Object.entries(incoming || {})) {
+    const normalized = normalizeQuizAttemptValue(raw);
+    if (!normalized) continue;
+    const prev = normalizeQuizAttemptValue(next[key]);
+    next[key] = {
+      selectedIndex:
+        normalized.selectedIndex !== null && normalized.selectedIndex !== undefined
+          ? normalized.selectedIndex
+          : prev?.selectedIndex ?? null,
+      correct:
+        normalized.correct !== null && normalized.correct !== undefined
+          ? normalized.correct
+          : prev?.correct ?? null,
+      answeredAt: normalized.answeredAt || prev?.answeredAt || new Date(),
+    };
+  }
+  return next;
+}
+
 function upsertEngagementEntry(progress, payload = {}) {
   const lessonId = String(payload.lessonId || "").trim();
   if (!lessonId) {
@@ -128,6 +191,9 @@ function upsertEngagementEntry(progress, payload = {}) {
       read: false,
       confidence: "",
       quizAttempts: {},
+      challengeAttempts: 0,
+      challengeLastResult: "",
+      lastTab: "",
       updatedAt: new Date(),
     };
     progress.lessonEngagement.push(entry);
@@ -140,10 +206,24 @@ function upsertEngagementEntry(progress, payload = {}) {
     entry.confidence = String(payload.confidence);
   }
   if (payload.quizAttempts && typeof payload.quizAttempts === "object") {
-    entry.quizAttempts = {
-      ...(entry.quizAttempts || {}),
-      ...payload.quizAttempts,
-    };
+    entry.quizAttempts = mergeQuizAttempts(
+      entry.quizAttempts || {},
+      payload.quizAttempts,
+    );
+  }
+  if (payload.incrementChallengeAttempts) {
+    entry.challengeAttempts = (Number(entry.challengeAttempts) || 0) + 1;
+  } else if (payload.challengeAttempts !== undefined) {
+    entry.challengeAttempts = Math.max(
+      0,
+      Number(payload.challengeAttempts) || 0,
+    );
+  }
+  if (payload.challengeLastResult !== undefined && payload.challengeLastResult !== null) {
+    entry.challengeLastResult = String(payload.challengeLastResult);
+  }
+  if (payload.lastTab !== undefined && payload.lastTab !== null) {
+    entry.lastTab = String(payload.lastTab);
   }
 
   entry.updatedAt = new Date();
@@ -363,15 +443,19 @@ function isActiveStreakDate(lastActiveDate) {
 function summarizeEngagement(docs = []) {
   let lessonsRead = 0;
   let quizAnswered = 0;
+  let quizCorrect = 0;
+  let challengeFails = 0;
 
   for (const doc of docs) {
     for (const row of doc.lessonEngagement || []) {
       if (row.read) lessonsRead += 1;
-      quizAnswered += Object.keys(row.quizAttempts || {}).length;
+      quizAnswered += countQuizAnswers(row.quizAttempts);
+      quizCorrect += countQuizCorrect(row.quizAttempts);
+      challengeFails += Number(row.challengeAttempts) || 0;
     }
   }
 
-  return { lessonsRead, quizAnswered };
+  return { lessonsRead, quizAnswered, quizCorrect, challengeFails };
 }
 
 async function getLearnDashboard(userId) {
@@ -411,7 +495,15 @@ async function getLearnDashboard(userId) {
       lastActiveDate: doc.lastActiveDate || null,
       lessonsRead: (doc.lessonEngagement || []).filter((row) => row.read).length,
       quizAnswered: (doc.lessonEngagement || []).reduce(
-        (sum, row) => sum + Object.keys(row.quizAttempts || {}).length,
+        (sum, row) => sum + countQuizAnswers(row.quizAttempts),
+        0,
+      ),
+      quizCorrect: (doc.lessonEngagement || []).reduce(
+        (sum, row) => sum + countQuizCorrect(row.quizAttempts),
+        0,
+      ),
+      challengeFails: (doc.lessonEngagement || []).reduce(
+        (sum, row) => sum + (Number(row.challengeAttempts) || 0),
         0,
       ),
     };
@@ -423,7 +515,8 @@ async function getLearnDashboard(userId) {
     return bTime - aTime;
   });
 
-  const { lessonsRead, quizAnswered } = summarizeEngagement(courses);
+  const { lessonsRead, quizAnswered, quizCorrect, challengeFails } =
+    summarizeEngagement(courses);
   const coursesCompleted = courseRows.filter((row) => row.completedCount > 0).length;
   const dailyXpTotal = dailyXp?.totalXp || 0;
 
@@ -438,6 +531,8 @@ async function getLearnDashboard(userId) {
       activeStreak,
       lessonsRead,
       quizAnswered,
+      quizCorrect,
+      challengeFails,
     },
     courses: courseRows,
   };

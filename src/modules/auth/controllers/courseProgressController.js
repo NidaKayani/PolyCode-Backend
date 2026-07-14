@@ -146,14 +146,32 @@ async function addTime(req, res) {
 
 async function upsertEngagement(req, res) {
   try {
-    const { lessonId, read, confidence, quizAttempts } = req.body;
+    const {
+      lessonId,
+      read,
+      confidence,
+      quizAttempts,
+      challengeAttempts,
+      challengeLastResult,
+      lastTab,
+      incrementChallengeAttempts,
+    } = req.body;
     if (!lessonId) {
       return res.status(400).json({ error: "lessonId is required" });
     }
     const progress = await courseProgress.upsertLessonEngagement(
       req.userId,
       req.params.courseId,
-      { lessonId, read, confidence, quizAttempts },
+      {
+        lessonId,
+        read,
+        confidence,
+        quizAttempts,
+        challengeAttempts,
+        challengeLastResult,
+        lastTab,
+        incrementChallengeAttempts,
+      },
     );
     res.json({ progress });
   } catch (error) {
@@ -184,12 +202,16 @@ async function getPublicDashboard(req, res) {
     const overview = { ...(dashboard.overview || {}) };
     delete overview.lessonsRead;
     delete overview.quizAnswered;
+    delete overview.quizCorrect;
+    delete overview.challengeFails;
     res.json({
       overview,
       courses: (dashboard.courses || []).map((row) => {
         const next = { ...row };
         delete next.lessonsRead;
         delete next.quizAnswered;
+        delete next.quizCorrect;
+        delete next.challengeFails;
         return next;
       }),
     });
