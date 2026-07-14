@@ -1,4 +1,5 @@
 const {
+  findLearnerDoc,
   getOrCreateLearnerDoc,
   saveLearnerDoc,
 } = require("./learnerProgressStore");
@@ -165,7 +166,10 @@ function formatResponse(dailyXp) {
 }
 
 async function getDailyXp(userId) {
-  const learner = await getOrCreateLearnerDoc(userId);
+  const learner = await findLearnerDoc(userId);
+  if (!learner) {
+    return formatResponse({ days: [], totalXp: 0 });
+  }
   if (backfillFromCourses(learner)) {
     await saveLearnerDoc(learner);
   }

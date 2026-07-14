@@ -1,7 +1,7 @@
 const { assertCourseId } = require("../constants/courseIds");
-const { agentLog } = require("../../../debug/agentLog807e54");
 const dailyXpService = require("./dailyXpService");
 const {
+  findLearnerDoc,
   getOrCreateLearnerDoc,
   courseToProgress,
   ensureCourseEntry,
@@ -33,37 +33,56 @@ function recalcTotalXp(progress) {
   );
 }
 
-async function withCourse(userId, courseId, mutator) {
+function emptyCourseProgress(userId, courseId) {
+  return courseToProgress(
+    {
+      courseId,
+      completedLessons: [],
+      savedCode: [],
+      notes: [],
+      lessonEngagement: [],
+      bookmarks: [],
+      lastLessonId: null,
+      totalXp: 0,
+      totalMinutesSpent: 0,
+      currentStreak: 0,
+      lastActiveDate: null,
+    },
+    userId,
+  );
+}
+
+async function withCourse(userId, courseId, mutator, { createIfMissing = true } = {}) {
   const id = assertCourseId(courseId);
-  const learner = await getOrCreateLearnerDoc(userId);
+  let learner = null;
+
+  if (createIfMissing) {
+    learner = await getOrCreateLearnerDoc(userId);
+  } else {
+    learner = await findLearnerDoc(userId);
+    if (!learner) {
+      return emptyCourseProgress(userId, id);
+    }
+  }
+
   const course = ensureCourseEntry(learner, id);
   await mutator(course, learner);
   await saveLearnerDoc(learner);
   return courseToProgress(course, userId);
 }
 
+/**
+ * Read-only: never creates learner_progress or empty course slots.
+ */
 async function getOrCreateProgress(userId, courseId) {
   const id = assertCourseId(courseId);
+  const learner = await findLearnerDoc(userId);
+  const course = learner?.courses?.find((item) => item.courseId === id) || null;
 
-  for (let attempt = 0; attempt < 3; attempt += 1) {
-    const learner = await getOrCreateLearnerDoc(userId);
-    const existed = (learner.courses || []).some((item) => item.courseId === id);
-    const course = ensureCourseEntry(learner, id);
-    if (existed) {
-      return courseToProgress(course, userId);
-    }
-    try {
-      await saveLearnerDoc(learner);
-      return courseToProgress(course, userId);
-    } catch (error) {
-      if (error?.name !== "VersionError" && error?.statusCode !== 409) {
-        throw error;
-      }
-    }
+  if (!course) {
+    return emptyCourseProgress(userId, id);
   }
-
-  const learner = await getOrCreateLearnerDoc(userId);
-  return courseToProgress(ensureCourseEntry(learner, id), userId);
+  return courseToProgress(course, userId);
 }
 
 async function getProgress(userId, courseId) {
@@ -71,7 +90,10 @@ async function getProgress(userId, courseId) {
 }
 
 async function listProgressForUser(userId, { includePrivate = true } = {}) {
-  const learner = await getOrCreateLearnerDoc(userId);
+  const learner = await findLearnerDoc(userId);
+  if (!learner) {
+    return [];
+  }
   const docs = (learner.courses || []).map((course) =>
     courseToProgress(course, userId),
   );
@@ -219,10 +241,15 @@ function upsertEngagementEntry(progress, payload = {}) {
 }
 
 async function upsertLessonEngagement(userId, courseId, payload = {}) {
-  return withCourse(userId, courseId, async (course) => {
-    upsertEngagementEntry(course, payload);
-    touchStreak(course);
-  });
+  return withCourse(
+    userId,
+    courseId,
+    async (course) => {
+      upsertEngagementEntry(course, payload);
+      touchStreak(course);
+    },
+    { createIfMissing: false },
+  );
 }
 
 async function completeLesson(userId, courseId, lesson) {
@@ -235,7 +262,6 @@ async function completeLesson(userId, courseId, lesson) {
     const existing = course.completedLessons.find(
       (item) => item.lessonId === lessonId,
     );
-    const wasNew = !existing;
 
     if (!existing) {
       const completedAt = new Date();
@@ -260,32 +286,19 @@ async function completeLesson(userId, courseId, lesson) {
 
     course.lastLessonId = lessonId;
     touchStreak(course);
-
-    // #region agent log
-    agentLog({
-      location: "courseProgressService.js:completeLesson",
-      message: "course mutation after complete",
-      data: {
-        courseId,
-        lessonId,
-        wasNew,
-        lessonXp: Number(lesson.xp) || 0,
-        totalXp: course.totalXp,
-        completedCount: course.completedLessons.length,
-        dailyXpDays: learner.dailyXp?.days?.length || 0,
-        dailyXpTotal: learner.dailyXp?.totalXp || 0,
-      },
-      hypothesisId: "H2",
-    });
-    // #endregion
   });
 }
 
 async function setLastLesson(userId, courseId, lessonId) {
-  return withCourse(userId, courseId, async (course) => {
-    course.lastLessonId = lessonId;
-    touchStreak(course);
-  });
+  return withCourse(
+    userId,
+    courseId,
+    async (course) => {
+      course.lastLessonId = lessonId;
+      touchStreak(course);
+    },
+    { createIfMissing: false },
+  );
 }
 
 async function saveCode(userId, courseId, lessonId, code) {
@@ -334,10 +347,15 @@ async function toggleBookmark(userId, courseId, lessonId) {
 }
 
 async function addTime(userId, courseId, minutes) {
-  return withCourse(userId, courseId, async (course) => {
-    course.totalMinutesSpent += Math.max(0, Number(minutes) || 0);
-    touchStreak(course);
-  });
+  return withCourse(
+    userId,
+    courseId,
+    async (course) => {
+      course.totalMinutesSpent += Math.max(0, Number(minutes) || 0);
+      touchStreak(course);
+    },
+    { createIfMissing: false },
+  );
 }
 
 async function mergeLocalProgress(userId, courseId, localPayload = {}) {
@@ -545,6 +563,17 @@ async function getLearnDashboard(userId) {
 async function mergeManyLocalProgress(userId, courses = {}) {
   const results = {};
   for (const [courseId, payload] of Object.entries(courses)) {
+    const hasData =
+      Object.keys(payload?.completedMap || {}).length > 0 ||
+      Object.keys(payload?.savedCodeMap || {}).length > 0 ||
+      Object.keys(payload?.notesMap || {}).length > 0 ||
+      Object.keys(payload?.engagementMap || {}).length > 0 ||
+      (payload?.bookmarks || []).length > 0 ||
+      Boolean(payload?.lastLessonId);
+    if (!hasData) {
+      results[courseId] = { skipped: true, reason: "empty payload" };
+      continue;
+    }
     try {
       results[courseId] = await mergeLocalProgress(userId, courseId, payload);
     } catch (error) {

@@ -1,8 +1,15 @@
 const LearnerProgress = require("../models/LearnerProgress");
-const { agentLog } = require("../../../debug/agentLog807e54");
+
+/**
+ * Find learner doc without creating. Returns null if missing.
+ */
+async function findLearnerDoc(userId) {
+  return LearnerProgress.findOne({ userId });
+}
 
 /**
  * Get or create the single learner document for a user.
+ * Prefer writes only — reads should use findLearnerDoc.
  */
 async function getOrCreateLearnerDoc(userId) {
   let doc = await LearnerProgress.findOne({ userId });
@@ -71,7 +78,6 @@ function ensureCourseEntry(learner, courseId) {
 
 /**
  * Persist learner doc with size guard against Mongo's 16MB limit.
- * Retries once on VersionError (parallel profile fetches / writes).
  */
 async function saveLearnerDoc(learner) {
   const size = Buffer.byteLength(JSON.stringify(learner.toObject()), "utf8");
@@ -81,14 +87,6 @@ async function saveLearnerDoc(learner) {
       `Learner progress document exceeds ${max} bytes (got ${size})`,
     );
     error.statusCode = 413;
-    // #region agent log
-    agentLog({
-      location: "learnerProgressStore.js:saveLearnerDoc",
-      message: "save rejected doc too large",
-      data: { size, max, courseCount: learner.courses?.length },
-      hypothesisId: "H3",
-    });
-    // #endregion
     throw error;
   }
   learner.markModified("courses");
@@ -98,35 +96,16 @@ async function saveLearnerDoc(learner) {
     await learner.save();
   } catch (error) {
     if (error?.name === "VersionError") {
-      // Another request saved first — reload and fail soft for reads;
-      // writers should re-apply via higher-level retry if needed.
       error.statusCode = 409;
       error.message = "Progress was updated by another request; please retry";
     }
     throw error;
   }
-  // #region agent log
-  agentLog({
-    location: "learnerProgressStore.js:saveLearnerDoc",
-    message: "learner doc saved",
-    data: {
-      userId: String(learner.userId),
-      courseCount: learner.courses?.length,
-      courseIds: (learner.courses || []).map((c) => c.courseId),
-      courseXp: (learner.courses || []).map((c) => ({
-        courseId: c.courseId,
-        totalXp: c.totalXp,
-        completed: c.completedLessons?.length,
-      })),
-      docBytes: size,
-    },
-    hypothesisId: "H3",
-  });
-  // #endregion
   return learner;
 }
 
 module.exports = {
+  findLearnerDoc,
   getOrCreateLearnerDoc,
   courseToProgress,
   ensureCourseEntry,

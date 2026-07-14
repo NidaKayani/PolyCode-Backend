@@ -1,5 +1,6 @@
 const { assertCourseId } = require("../constants/courseIds");
 const {
+  findLearnerDoc,
   getOrCreateLearnerDoc,
   saveLearnerDoc,
 } = require("./learnerProgressStore");
@@ -97,8 +98,10 @@ async function getAnnotation(userId, courseId, lessonId, tab = "theory") {
   const id = assertCourseId(courseId);
   const cleanLessonId = String(lessonId || "").trim();
   const cleanTab = normalizeTab(tab);
-  const learner = await getOrCreateLearnerDoc(userId);
-  const doc = findAnnotation(learner, id, cleanLessonId, cleanTab);
+  const learner = await findLearnerDoc(userId);
+  const doc = learner
+    ? findAnnotation(learner, id, cleanLessonId, cleanTab)
+    : null;
 
   if (!doc) {
     return {
