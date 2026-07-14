@@ -25,6 +25,47 @@ in the collection `learner_progress` (model `LearnerProgress`).
 - Per-annotation payload: **100KB** (strokes may be downsampled).
 - Whole learner document: **10MB** soft ceiling (Mongo hard limit is 16MB).
 
+## When is `learner_progress` created?
+
+Documents are **not** created on GET / login / last-lesson peek. They are created on the
+first real write for that user:
+
+| Write | Creates doc? |
+|-------|----------------|
+| `POST .../progress/complete` | Yes (`createIfMissing: true`) |
+| `POST .../code`, `/note`, `/bookmark` | Yes |
+| `POST /auth/learn/progress/merge` (login merge with data) | Yes when payload has completions |
+| Annotation `PUT` | Yes |
+| `GET .../progress`, daily-xp read, annotation get | No — returns empty shell if missing |
+| `POST .../last-lesson`, `/time`, `/engagement` | No create (`createIfMissing: false`) |
+
+After the first create, later completes append to `courses[].completedLessons`,
+recalculate `courses[].totalXp`, and apply the same XP into `dailyXp.days` via
+`dailyXpService.applyLessonXp` in the same save.
+
+## Hub XP vs daily XP
+
+| Surface | Source |
+|---------|--------|
+| **Hub XP / progress bar** | Client `completedMap` × curriculum `lesson.xp` (local + remote merge) |
+| **Course `totalXp` in Mongo** | Sum of completed lesson XP for that course |
+| **Profile / Learning activity graph** | `dailyXp.days` (and dashboard overview totals) |
+
+Completing a lesson while signed in should update all three. The shared hook
+`useCourseProgress` keeps optimistic local completions so hub counters do not
+reset to 0 when GET returns an empty shell before the first DB write.
+
+## Certificates
+
+| Surface | Where | When |
+|---------|--------|------|
+| **Hub certificate** | Every learn course hub (`CourseCertificate`) | Shown when `completedCount >= totalLessons` |
+| **Profile featured certificates** | Profile page only for `PROFILE_FEATURED_TRACKS` | Same completion rule for the five featured tracks: `oops-cpp`, `pointers-cpp`, `numpy-py`, `pandas-py`, `fastapi-py` |
+
+Hub certs are local UI (stable client-generated cert ID + QR to verify). Profile
+certs stay limited to featured tracks by design; expanding that list is out of
+scope unless product asks for all 49.
+
 ## API (unchanged shapes)
 
 Bearer JWT required unless noted:
@@ -54,10 +95,21 @@ annotations into the single learner document.
 
 ## Frontend entry points
 
-- `useCourseProgress` — completions + time tracking
+- `useCourseProgress` — completions + time tracking (optimistic complete; empty GET does not wipe local XP)
 - `useLessonReadGate` / `useLessonQuizAttempts` — engagement
 - `LessonAnnotator` — annotations
 - `useLearnDashboard` / `useProfileLearnProgress` — profile UI
+- `CourseCertificate` — hub certificate UI
+
+## Audit / smoke
+
+```bash
+# Frontend: registry, hooks, complete wiring, XP UI, hub certs
+cd frontend && npm run audit:learn-courses
+
+# Backend: completeLesson creates learner_progress + dailyXp for 2 courses
+cd backend && npm run smoke:learn-xp
+```
 
 ## Still local-only (by design)
 
@@ -74,4 +126,4 @@ npm run clean-db -- --yes
 ```
 
 After wipe, register/login again. The app recreates `users` and `learner_progress`
-on first use.
+on first real progress write (not on empty GET).
