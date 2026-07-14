@@ -1,5 +1,6 @@
 const courseProgress = require("../services/courseProgressService");
 const User = require("../models/User");
+const { agentLog } = require("../../../debug/agentLog807e54");
 
 function statusFromError(error) {
   return error.statusCode || 400;
@@ -66,6 +67,14 @@ async function completeLesson(req, res) {
   try {
     const { lesson } = req.body;
     if (!lesson?.id && !lesson?.lessonId) {
+      // #region agent log
+      agentLog({
+        location: "courseProgressController.js:completeLesson",
+        message: "complete rejected missing lesson id",
+        data: { courseId: req.params.courseId },
+        hypothesisId: "H1",
+      });
+      // #endregion
       return res.status(400).json({ error: "lesson metadata is required" });
     }
 
@@ -74,8 +83,34 @@ async function completeLesson(req, res) {
       req.params.courseId,
       lesson,
     );
+    // #region agent log
+    agentLog({
+      location: "courseProgressController.js:completeLesson",
+      message: "completeLesson ok",
+      data: {
+        courseId: req.params.courseId,
+        lessonId: lesson.lessonId || lesson.id,
+        lessonXp: lesson.xp,
+        totalXp: progress?.totalXp,
+        completedCount: progress?.completedLessons?.length,
+      },
+      hypothesisId: "H1",
+    });
+    // #endregion
     res.json({ progress });
   } catch (error) {
+    // #region agent log
+    agentLog({
+      location: "courseProgressController.js:completeLesson",
+      message: "completeLesson error",
+      data: {
+        courseId: req.params.courseId,
+        error: error.message,
+        statusCode: error.statusCode,
+      },
+      hypothesisId: "H1",
+    });
+    // #endregion
     res.status(statusFromError(error)).json({ error: error.message });
   }
 }

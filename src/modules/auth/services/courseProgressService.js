@@ -1,4 +1,5 @@
 const { assertCourseId } = require("../constants/courseIds");
+const { agentLog } = require("../../../debug/agentLog807e54");
 const dailyXpService = require("./dailyXpService");
 const {
   getOrCreateLearnerDoc,
@@ -218,6 +219,7 @@ async function completeLesson(userId, courseId, lesson) {
     const existing = course.completedLessons.find(
       (item) => item.lessonId === lessonId,
     );
+    const wasNew = !existing;
 
     if (!existing) {
       course.completedLessons.push({
@@ -233,6 +235,22 @@ async function completeLesson(userId, courseId, lesson) {
 
     course.lastLessonId = lessonId;
     touchStreak(course);
+
+    // #region agent log
+    agentLog({
+      location: "courseProgressService.js:completeLesson",
+      message: "course mutation after complete",
+      data: {
+        courseId,
+        lessonId,
+        wasNew,
+        lessonXp: Number(lesson.xp) || 0,
+        totalXp: course.totalXp,
+        completedCount: course.completedLessons.length,
+      },
+      hypothesisId: "H2",
+    });
+    // #endregion
   });
 }
 

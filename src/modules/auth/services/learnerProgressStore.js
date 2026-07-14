@@ -1,4 +1,5 @@
 const LearnerProgress = require("../models/LearnerProgress");
+const { agentLog } = require("../../../debug/agentLog807e54");
 
 /**
  * Get or create the single learner document for a user.
@@ -79,12 +80,38 @@ async function saveLearnerDoc(learner) {
       `Learner progress document exceeds ${max} bytes (got ${size})`,
     );
     error.statusCode = 413;
+    // #region agent log
+    agentLog({
+      location: "learnerProgressStore.js:saveLearnerDoc",
+      message: "save rejected doc too large",
+      data: { size, max, courseCount: learner.courses?.length },
+      hypothesisId: "H3",
+    });
+    // #endregion
     throw error;
   }
   learner.markModified("courses");
   learner.markModified("dailyXp");
   learner.markModified("annotations");
   await learner.save();
+  // #region agent log
+  agentLog({
+    location: "learnerProgressStore.js:saveLearnerDoc",
+    message: "learner doc saved",
+    data: {
+      userId: String(learner.userId),
+      courseCount: learner.courses?.length,
+      courseIds: (learner.courses || []).map((c) => c.courseId),
+      courseXp: (learner.courses || []).map((c) => ({
+        courseId: c.courseId,
+        totalXp: c.totalXp,
+        completed: c.completedLessons?.length,
+      })),
+      docBytes: size,
+    },
+    hypothesisId: "H3",
+  });
+  // #endregion
   return learner;
 }
 
