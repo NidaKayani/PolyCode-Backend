@@ -44,6 +44,11 @@ const COURSE_IDS = [
   "java-intermediate",
   "java-advanced",
   "java-collections",
+  "java-exception",
+  "java-multithreading",
+  "java-jdbc",
+  "java-spring-boot",
+  "java-projects",
 ];
 
 const COURSE_ID_SET = new Set(COURSE_IDS);
