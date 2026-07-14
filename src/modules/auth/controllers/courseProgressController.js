@@ -144,6 +144,60 @@ async function addTime(req, res) {
   }
 }
 
+async function upsertEngagement(req, res) {
+  try {
+    const { lessonId, read, confidence, quizAttempts } = req.body;
+    if (!lessonId) {
+      return res.status(400).json({ error: "lessonId is required" });
+    }
+    const progress = await courseProgress.upsertLessonEngagement(
+      req.userId,
+      req.params.courseId,
+      { lessonId, read, confidence, quizAttempts },
+    );
+    res.json({ progress });
+  } catch (error) {
+    res.status(statusFromError(error)).json({ error: error.message });
+  }
+}
+
+async function getDashboard(req, res) {
+  try {
+    const dashboard = await courseProgress.getLearnDashboard(req.userId);
+    res.json(dashboard);
+  } catch (error) {
+    res.status(statusFromError(error)).json({ error: error.message });
+  }
+}
+
+async function getPublicDashboard(req, res) {
+  try {
+    const username = String(req.params.username || "")
+      .trim()
+      .toLowerCase();
+    const user = await User.findOne({ username, isActive: true }).select("_id");
+    if (!user) {
+      return res.status(404).json({ error: "User not found" });
+    }
+    const dashboard = await courseProgress.getLearnDashboard(user._id);
+    // Public: course list + XP/time/streak aggregates; no engagement counts.
+    const overview = { ...(dashboard.overview || {}) };
+    delete overview.lessonsRead;
+    delete overview.quizAnswered;
+    res.json({
+      overview,
+      courses: (dashboard.courses || []).map((row) => {
+        const next = { ...row };
+        delete next.lessonsRead;
+        delete next.quizAnswered;
+        return next;
+      }),
+    });
+  } catch (error) {
+    res.status(statusFromError(error)).json({ error: error.message });
+  }
+}
+
 async function mergeLocal(req, res) {
   try {
     const { courses } = req.body;
@@ -170,5 +224,8 @@ module.exports = {
   saveNote,
   toggleBookmark,
   addTime,
+  upsertEngagement,
+  getDashboard,
+  getPublicDashboard,
   mergeLocal,
 };

@@ -30,6 +30,17 @@ const lessonNoteSchema = new mongoose.Schema(
   { _id: false },
 );
 
+const lessonEngagementSchema = new mongoose.Schema(
+  {
+    lessonId: { type: String, required: true },
+    read: { type: Boolean, default: false },
+    confidence: { type: String, default: "" },
+    quizAttempts: { type: mongoose.Schema.Types.Mixed, default: {} },
+    updatedAt: { type: Date, default: Date.now },
+  },
+  { _id: false },
+);
+
 const courseProgressSchema = new mongoose.Schema(
   {
     userId: {
@@ -53,6 +64,10 @@ const courseProgressSchema = new mongoose.Schema(
     },
     notes: {
       type: [lessonNoteSchema],
+      default: [],
+    },
+    lessonEngagement: {
+      type: [lessonEngagementSchema],
       default: [],
     },
     bookmarks: {

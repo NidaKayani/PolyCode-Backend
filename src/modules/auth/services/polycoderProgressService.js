@@ -131,9 +131,59 @@ function buildPointsByDay(dailyXp) {
   }));
 }
 
-function buildOverview({ user, languageProgress, oopsCppProgress, dailyXp }) {
+function serializeCourseRow(course) {
+  if (!course) return null;
+  return {
+    courseId: course.courseId,
+    lastLessonId: course.lastLessonId ?? null,
+    stats: {
+      totalXp: course.totalXp ?? 0,
+      minutesSpent: course.totalMinutesSpent ?? 0,
+      currentStreak: course.currentStreak ?? 0,
+      lastActive: formatDate(course.lastActiveDate),
+      bookmarksCount: course.bookmarks?.length ?? 0,
+      completedCount: course.completedLessons?.length ?? 0,
+      lessonsRead: (course.lessonEngagement || []).filter((row) => row.read).length,
+      quizAnswered: (course.lessonEngagement || []).reduce(
+        (sum, row) => sum + Object.keys(row.quizAttempts || {}).length,
+        0,
+      ),
+    },
+    completedLessons: (course.completedLessons ?? []).map((lesson) => ({
+      lessonId: lesson.lessonId,
+      title: lesson.title,
+      chapter: lesson.chapterTitle,
+      chapterId: lesson.chapterId,
+      xp: lesson.xp ?? 0,
+      completedAt: formatDate(lesson.completedAt),
+    })),
+    bookmarks: course.bookmarks ?? [],
+  };
+}
+
+function buildOverview({ user, languageProgress, courseDocs, dailyXp }) {
   const languages = languageProgress || [];
-  const oops = oopsCppProgress || {};
+  const courses = courseDocs || [];
+  const courseXp = courses.reduce((sum, doc) => sum + (doc.totalXp || 0), 0);
+  const courseMinutes = courses.reduce(
+    (sum, doc) => sum + (doc.totalMinutesSpent || 0),
+    0,
+  );
+  const courseStreaks = courses.map((doc) => doc.currentStreak || 0);
+  const lessonsRead = courses.reduce(
+    (sum, doc) =>
+      sum + (doc.lessonEngagement || []).filter((row) => row.read).length,
+    0,
+  );
+  const quizAnswered = courses.reduce(
+    (sum, doc) =>
+      sum +
+      (doc.lessonEngagement || []).reduce(
+        (inner, row) => inner + Object.keys(row.quizAttempts || {}).length,
+        0,
+      ),
+    0,
+  );
 
   return {
     languagesStarted: languages.length,
@@ -143,21 +193,34 @@ function buildOverview({ user, languageProgress, oopsCppProgress, dailyXp }) {
       .length,
     totalMinutesSpent:
       languages.reduce((sum, entry) => sum + (entry.totalMinutesSpent || 0), 0) +
-      (oops.totalMinutesSpent || 0),
+      courseMinutes,
     totalDocumentsCompleted: languages.reduce(
       (sum, entry) => sum + (entry.completedDocuments?.length || 0),
       0,
     ),
-    completedLessonsCount: oops.completedLessons?.length || 0,
-    oopsCppTotalXp: oops.totalXp || 0,
+    completedLessonsCount: courses.reduce(
+      (sum, doc) => sum + (doc.completedLessons?.length || 0),
+      0,
+    ),
+    coursesStarted: courses.filter(
+      (doc) =>
+        (doc.completedLessons || []).length > 0 ||
+        (doc.bookmarks || []).length > 0 ||
+        Boolean(doc.lastLessonId),
+    ).length,
+    courseXpTotal: courseXp,
+    lessonsRead,
+    quizAnswered,
     dailyXpTotal: dailyXp?.totalXp || 0,
     currentStreak: Math.max(
       user?.currentStreak || 0,
-      oops.currentStreak || 0,
+      ...courseStreaks,
       ...languages.map((entry) => entry.currentStreak || 0),
       0,
     ),
     highestStreak: user?.highestStreak || 0,
+    oopsCppTotalXp:
+      courses.find((doc) => doc.courseId === "oops-cpp")?.totalXp || 0,
   };
 }
 
@@ -184,14 +247,24 @@ async function getProgressByUsername(username) {
 
   const userId = user._id;
 
-  const [languageProgress, courseOops, legacyOops, dailyXp] = await Promise.all([
+  const [languageProgress, allCourses, legacyOops, dailyXp] = await Promise.all([
     UserProgress.find({ userId }).lean(),
-    CourseProgress.findOne({ userId, courseId: "oops-cpp" }).lean(),
+    CourseProgress.find({ userId }).lean(),
     OopsCppProgress.findOne({ userId }).lean(),
     dailyXpService.getDailyXp(userId),
   ]);
 
-  const oopsCppProgress = courseOops || legacyOops;
+  const courseDocs = [...allCourses];
+  if (!courseDocs.some((doc) => doc.courseId === "oops-cpp") && legacyOops) {
+    courseDocs.push({
+      ...legacyOops,
+      courseId: "oops-cpp",
+      lessonEngagement: [],
+    });
+  }
+
+  const oopsCppProgress =
+    courseDocs.find((doc) => doc.courseId === "oops-cpp") || null;
 
   const firstName = user.firstName || "";
   const lastName = user.lastName || "";
@@ -213,11 +286,16 @@ async function getProgressByUsername(username) {
   const overview = buildOverview({
     user,
     languageProgress,
-    oopsCppProgress,
+    courseDocs,
     dailyXp,
   });
 
   const dailyXpPayload = serializeDailyXp(dailyXp);
+  const coursesById = {};
+  for (const doc of courseDocs) {
+    coursesById[doc.courseId] = serializeCourseRow(doc);
+  }
+  coursesById.oopsCpp = serializeOopsCpp(oopsCppProgress);
 
   return {
     polycoder,
@@ -227,9 +305,7 @@ async function getProgressByUsername(username) {
     languageTracks: (languageProgress || [])
       .map(serializeLanguageTrack)
       .filter(Boolean),
-    courses: {
-      oopsCpp: serializeOopsCpp(oopsCppProgress),
-    },
+    courses: coursesById,
     pointsByDay: buildPointsByDay(dailyXp),
     dailyXp: dailyXpPayload,
   };

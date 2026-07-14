@@ -40,6 +40,12 @@ router.get(
   courseProgressController.listPublicProgress,
 );
 
+/** GET /api/auth/username/:username/learn/dashboard — public learner dashboard */
+router.get(
+  "/username/:username/learn/dashboard",
+  courseProgressController.getPublicDashboard,
+);
+
 /** POST /api/auth/username/:username/follow */
 router.post(
   "/username/:username/follow",
@@ -140,6 +146,11 @@ router.get(
   requireAuth,
   courseProgressController.listMyProgress,
 );
+router.get(
+  "/learn/dashboard",
+  requireAuth,
+  courseProgressController.getDashboard,
+);
 router.post(
   "/learn/progress/merge",
   requireAuth,
@@ -180,6 +191,11 @@ router.post(
   "/learn/:courseId/progress/time",
   requireAuth,
   courseProgressController.addTime,
+);
+router.post(
+  "/learn/:courseId/progress/engagement",
+  requireAuth,
+  courseProgressController.upsertEngagement,
 );
 
 // ── Learn: OOP C++ Progress Routes (legacy aliases → shared CourseProgress) ──

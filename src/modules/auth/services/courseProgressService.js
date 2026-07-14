@@ -1,6 +1,7 @@
 const CourseProgress = require("../models/CourseProgress");
 const OopsCppProgress = require("../models/OopsCppProgress");
 const { assertCourseId } = require("../constants/courseIds");
+const dailyXpService = require("./dailyXpService");
 
 function touchStreak(progress) {
   const today = new Date();
@@ -110,6 +111,53 @@ async function listProgressForUser(userId, { includePrivate = true } = {}) {
   return docs;
 }
 
+function upsertEngagementEntry(progress, payload = {}) {
+  const lessonId = String(payload.lessonId || "").trim();
+  if (!lessonId) {
+    throw new Error("lessonId is required");
+  }
+
+  if (!Array.isArray(progress.lessonEngagement)) {
+    progress.lessonEngagement = [];
+  }
+
+  let entry = progress.lessonEngagement.find((item) => item.lessonId === lessonId);
+  if (!entry) {
+    entry = {
+      lessonId,
+      read: false,
+      confidence: "",
+      quizAttempts: {},
+      updatedAt: new Date(),
+    };
+    progress.lessonEngagement.push(entry);
+  }
+
+  if (payload.read !== undefined) {
+    entry.read = Boolean(payload.read) || entry.read;
+  }
+  if (payload.confidence !== undefined && payload.confidence !== null) {
+    entry.confidence = String(payload.confidence);
+  }
+  if (payload.quizAttempts && typeof payload.quizAttempts === "object") {
+    entry.quizAttempts = {
+      ...(entry.quizAttempts || {}),
+      ...payload.quizAttempts,
+    };
+  }
+
+  entry.updatedAt = new Date();
+  return entry;
+}
+
+async function upsertLessonEngagement(userId, courseId, payload = {}) {
+  const progress = await getOrCreateProgress(userId, courseId);
+  upsertEngagementEntry(progress, payload);
+  touchStreak(progress);
+  await progress.save();
+  return progress;
+}
+
 async function completeLesson(userId, courseId, lesson) {
   const progress = await getOrCreateProgress(userId, courseId);
   const lessonId = lesson.lessonId || lesson.id;
@@ -212,7 +260,8 @@ async function addTime(userId, courseId, minutes) {
  *   savedCodeMap?: { [lessonId]: string },
  *   notesMap?: { [lessonId]: string },
  *   bookmarks?: string[],
- *   lastLessonId?: string
+ *   lastLessonId?: string,
+ *   engagementMap?: { [lessonId]: { read?, confidence?, quizAttempts? } }
  * }
  */
 async function mergeLocalProgress(userId, courseId, localPayload = {}) {
@@ -220,6 +269,7 @@ async function mergeLocalProgress(userId, courseId, localPayload = {}) {
   const completedMap = localPayload.completedMap || {};
   const savedCodeMap = localPayload.savedCodeMap || {};
   const notesMap = localPayload.notesMap || {};
+  const engagementMap = localPayload.engagementMap || {};
   const bookmarks = Array.isArray(localPayload.bookmarks)
     ? localPayload.bookmarks
     : [];
@@ -274,6 +324,15 @@ async function mergeLocalProgress(userId, courseId, localPayload = {}) {
     }
   }
 
+  for (const [lessonId, engagement] of Object.entries(engagementMap)) {
+    upsertEngagementEntry(progress, {
+      lessonId,
+      read: engagement?.read,
+      confidence: engagement?.confidence,
+      quizAttempts: engagement?.quizAttempts,
+    });
+  }
+
   const bookmarkSet = new Set([...(progress.bookmarks || []), ...bookmarks]);
   progress.bookmarks = Array.from(bookmarkSet);
 
@@ -285,6 +344,103 @@ async function mergeLocalProgress(userId, courseId, localPayload = {}) {
   touchStreak(progress);
   await progress.save();
   return progress;
+}
+
+function dayKey(date = new Date()) {
+  return new Date(date).toISOString().slice(0, 10);
+}
+
+function isActiveStreakDate(lastActiveDate) {
+  if (!lastActiveDate) return false;
+  const last = dayKey(lastActiveDate);
+  const today = dayKey(new Date());
+  const yesterdayDate = new Date();
+  yesterdayDate.setDate(yesterdayDate.getDate() - 1);
+  const yesterday = dayKey(yesterdayDate);
+  return last === today || last === yesterday;
+}
+
+function summarizeEngagement(docs = []) {
+  let lessonsRead = 0;
+  let quizAnswered = 0;
+
+  for (const doc of docs) {
+    for (const row of doc.lessonEngagement || []) {
+      if (row.read) lessonsRead += 1;
+      quizAnswered += Object.keys(row.quizAttempts || {}).length;
+    }
+  }
+
+  return { lessonsRead, quizAnswered };
+}
+
+async function getLearnDashboard(userId) {
+  const courses = await listProgressForUser(userId, { includePrivate: true });
+  const dailyXp = await dailyXpService.getDailyXp(userId);
+
+  let totalXp = 0;
+  let totalMinutesSpent = 0;
+  let bestStreak = 0;
+  let activeStreak = 0;
+  let coursesStarted = 0;
+
+  const courseRows = courses.map((doc) => {
+    const completedCount = (doc.completedLessons || []).length;
+    const started =
+      completedCount > 0 ||
+      (doc.bookmarks || []).length > 0 ||
+      Boolean(doc.lastLessonId) ||
+      (doc.lessonEngagement || []).length > 0;
+    if (started) coursesStarted += 1;
+
+    totalXp += Number(doc.totalXp) || 0;
+    totalMinutesSpent += Number(doc.totalMinutesSpent) || 0;
+    bestStreak = Math.max(bestStreak, Number(doc.currentStreak) || 0);
+    if (isActiveStreakDate(doc.lastActiveDate)) {
+      activeStreak = Math.max(activeStreak, Number(doc.currentStreak) || 0);
+    }
+
+    return {
+      courseId: doc.courseId,
+      totalXp: doc.totalXp || 0,
+      completedCount,
+      bookmarks: (doc.bookmarks || []).length,
+      minutes: doc.totalMinutesSpent || 0,
+      streak: doc.currentStreak || 0,
+      lastLessonId: doc.lastLessonId || null,
+      lastActiveDate: doc.lastActiveDate || null,
+      lessonsRead: (doc.lessonEngagement || []).filter((row) => row.read).length,
+      quizAnswered: (doc.lessonEngagement || []).reduce(
+        (sum, row) => sum + Object.keys(row.quizAttempts || {}).length,
+        0,
+      ),
+    };
+  });
+
+  courseRows.sort((a, b) => {
+    const aTime = a.lastActiveDate ? new Date(a.lastActiveDate).getTime() : 0;
+    const bTime = b.lastActiveDate ? new Date(b.lastActiveDate).getTime() : 0;
+    return bTime - aTime;
+  });
+
+  const { lessonsRead, quizAnswered } = summarizeEngagement(courses);
+  const coursesCompleted = courseRows.filter((row) => row.completedCount > 0).length;
+  const dailyXpTotal = dailyXp?.totalXp || 0;
+
+  return {
+    overview: {
+      totalXp,
+      dailyXpTotal,
+      totalMinutesSpent,
+      coursesStarted,
+      coursesCompleted,
+      bestStreak,
+      activeStreak,
+      lessonsRead,
+      quizAnswered,
+    },
+    courses: courseRows,
+  };
 }
 
 async function mergeManyLocalProgress(userId, courses = {}) {
@@ -308,7 +464,9 @@ module.exports = {
   saveNote,
   toggleBookmark,
   addTime,
+  upsertLessonEngagement,
   mergeLocalProgress,
   mergeManyLocalProgress,
   getOrCreateProgress,
+  getLearnDashboard,
 };
