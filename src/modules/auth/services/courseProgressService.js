@@ -1,7 +1,11 @@
-const CourseProgress = require("../models/CourseProgress");
-const OopsCppProgress = require("../models/OopsCppProgress");
 const { assertCourseId } = require("../constants/courseIds");
 const dailyXpService = require("./dailyXpService");
+const {
+  getOrCreateLearnerDoc,
+  courseToProgress,
+  ensureCourseEntry,
+  saveLearnerDoc,
+} = require("./learnerProgressStore");
 
 function touchStreak(progress) {
   const today = new Date();
@@ -28,36 +32,21 @@ function recalcTotalXp(progress) {
   );
 }
 
-async function migrateOopsCppIfNeeded(userId, progress) {
-  if (progress.courseId !== "oops-cpp") return progress;
-  if ((progress.completedLessons || []).length > 0) return progress;
-
-  const legacy = await OopsCppProgress.findOne({ userId }).lean();
-  if (!legacy) return progress;
-
-  progress.completedLessons = legacy.completedLessons || [];
-  progress.savedCode = legacy.savedCode || [];
-  progress.notes = legacy.notes || [];
-  progress.bookmarks = legacy.bookmarks || [];
-  progress.lastLessonId = legacy.lastLessonId || null;
-  progress.totalXp = legacy.totalXp || 0;
-  progress.totalMinutesSpent = legacy.totalMinutesSpent || 0;
-  progress.currentStreak = legacy.currentStreak || 0;
-  progress.lastActiveDate = legacy.lastActiveDate || null;
-  await progress.save();
-  return progress;
+async function withCourse(userId, courseId, mutator) {
+  const id = assertCourseId(courseId);
+  const learner = await getOrCreateLearnerDoc(userId);
+  const course = ensureCourseEntry(learner, id);
+  await mutator(course, learner);
+  await saveLearnerDoc(learner);
+  return courseToProgress(course, userId);
 }
 
 async function getOrCreateProgress(userId, courseId) {
   const id = assertCourseId(courseId);
-  let progress = await CourseProgress.findOne({ userId, courseId: id });
-
-  if (!progress) {
-    progress = new CourseProgress({ userId, courseId: id });
-    await progress.save();
-  }
-
-  return migrateOopsCppIfNeeded(userId, progress);
+  const learner = await getOrCreateLearnerDoc(userId);
+  const course = ensureCourseEntry(learner, id);
+  await saveLearnerDoc(learner);
+  return courseToProgress(course, userId);
 }
 
 async function getProgress(userId, courseId) {
@@ -65,28 +54,10 @@ async function getProgress(userId, courseId) {
 }
 
 async function listProgressForUser(userId, { includePrivate = true } = {}) {
-  const docs = await CourseProgress.find({ userId }).lean();
-
-  // Ensure OOP legacy shows up even before first CourseProgress touch
-  const hasOops = docs.some((d) => d.courseId === "oops-cpp");
-  if (!hasOops) {
-    const legacy = await OopsCppProgress.findOne({ userId }).lean();
-    if (legacy) {
-      docs.push({
-        userId,
-        courseId: "oops-cpp",
-        completedLessons: legacy.completedLessons || [],
-        savedCode: includePrivate ? legacy.savedCode || [] : [],
-        notes: includePrivate ? legacy.notes || [] : [],
-        bookmarks: legacy.bookmarks || [],
-        lastLessonId: legacy.lastLessonId || null,
-        totalXp: legacy.totalXp || 0,
-        totalMinutesSpent: legacy.totalMinutesSpent || 0,
-        currentStreak: legacy.currentStreak || 0,
-        lastActiveDate: legacy.lastActiveDate || null,
-      });
-    }
-  }
+  const learner = await getOrCreateLearnerDoc(userId);
+  const docs = (learner.courses || []).map((course) =>
+    courseToProgress(course, userId),
+  );
 
   if (!includePrivate) {
     return docs.map((doc) => ({
@@ -231,199 +202,179 @@ function upsertEngagementEntry(progress, payload = {}) {
 }
 
 async function upsertLessonEngagement(userId, courseId, payload = {}) {
-  const progress = await getOrCreateProgress(userId, courseId);
-  upsertEngagementEntry(progress, payload);
-  touchStreak(progress);
-  await progress.save();
-  return progress;
+  return withCourse(userId, courseId, async (course) => {
+    upsertEngagementEntry(course, payload);
+    touchStreak(course);
+  });
 }
 
 async function completeLesson(userId, courseId, lesson) {
-  const progress = await getOrCreateProgress(userId, courseId);
-  const lessonId = lesson.lessonId || lesson.id;
-  if (!lessonId) {
-    throw new Error("lessonId is required");
-  }
+  return withCourse(userId, courseId, async (course) => {
+    const lessonId = lesson.lessonId || lesson.id;
+    if (!lessonId) {
+      throw new Error("lessonId is required");
+    }
 
-  const existing = progress.completedLessons.find(
-    (item) => item.lessonId === lessonId,
-  );
+    const existing = course.completedLessons.find(
+      (item) => item.lessonId === lessonId,
+    );
 
-  if (!existing) {
-    progress.completedLessons.push({
-      lessonId,
-      title: lesson.title || "",
-      chapterId: lesson.chapterId || "",
-      chapterTitle: lesson.chapterTitle || "",
-      xp: lesson.xp || 0,
-      completedAt: new Date(),
-    });
-    recalcTotalXp(progress);
-  }
+    if (!existing) {
+      course.completedLessons.push({
+        lessonId,
+        title: lesson.title || "",
+        chapterId: lesson.chapterId || "",
+        chapterTitle: lesson.chapterTitle || "",
+        xp: lesson.xp || 0,
+        completedAt: new Date(),
+      });
+      recalcTotalXp(course);
+    }
 
-  progress.lastLessonId = lessonId;
-  touchStreak(progress);
-  await progress.save();
-  return progress;
+    course.lastLessonId = lessonId;
+    touchStreak(course);
+  });
 }
 
 async function setLastLesson(userId, courseId, lessonId) {
-  const progress = await getOrCreateProgress(userId, courseId);
-  progress.lastLessonId = lessonId;
-  touchStreak(progress);
-  await progress.save();
-  return progress;
+  return withCourse(userId, courseId, async (course) => {
+    course.lastLessonId = lessonId;
+    touchStreak(course);
+  });
 }
 
 async function saveCode(userId, courseId, lessonId, code) {
-  const progress = await getOrCreateProgress(userId, courseId);
-  const existing = progress.savedCode.find((item) => item.lessonId === lessonId);
+  return withCourse(userId, courseId, async (course) => {
+    const existing = course.savedCode.find((item) => item.lessonId === lessonId);
 
-  if (existing) {
-    existing.code = code;
-    existing.updatedAt = new Date();
-  } else {
-    progress.savedCode.push({ lessonId, code, updatedAt: new Date() });
-  }
+    if (existing) {
+      existing.code = code;
+      existing.updatedAt = new Date();
+    } else {
+      course.savedCode.push({ lessonId, code, updatedAt: new Date() });
+    }
 
-  progress.lastLessonId = lessonId;
-  touchStreak(progress);
-  await progress.save();
-  return progress;
+    course.lastLessonId = lessonId;
+    touchStreak(course);
+  });
 }
 
 async function saveNote(userId, courseId, lessonId, note) {
-  const progress = await getOrCreateProgress(userId, courseId);
-  const existing = progress.notes.find((item) => item.lessonId === lessonId);
+  return withCourse(userId, courseId, async (course) => {
+    const existing = course.notes.find((item) => item.lessonId === lessonId);
 
-  if (existing) {
-    existing.note = note;
-    existing.updatedAt = new Date();
-  } else {
-    progress.notes.push({ lessonId, note, updatedAt: new Date() });
-  }
+    if (existing) {
+      existing.note = note;
+      existing.updatedAt = new Date();
+    } else {
+      course.notes.push({ lessonId, note, updatedAt: new Date() });
+    }
 
-  progress.lastLessonId = lessonId;
-  touchStreak(progress);
-  await progress.save();
-  return progress;
+    course.lastLessonId = lessonId;
+    touchStreak(course);
+  });
 }
 
 async function toggleBookmark(userId, courseId, lessonId) {
-  const progress = await getOrCreateProgress(userId, courseId);
+  return withCourse(userId, courseId, async (course) => {
+    if (course.bookmarks.includes(lessonId)) {
+      course.bookmarks = course.bookmarks.filter((id) => id !== lessonId);
+    } else {
+      course.bookmarks.push(lessonId);
+    }
 
-  if (progress.bookmarks.includes(lessonId)) {
-    progress.bookmarks = progress.bookmarks.filter((id) => id !== lessonId);
-  } else {
-    progress.bookmarks.push(lessonId);
-  }
-
-  progress.lastLessonId = lessonId;
-  touchStreak(progress);
-  await progress.save();
-  return progress;
+    course.lastLessonId = lessonId;
+    touchStreak(course);
+  });
 }
 
 async function addTime(userId, courseId, minutes) {
-  const progress = await getOrCreateProgress(userId, courseId);
-  progress.totalMinutesSpent += Math.max(0, Number(minutes) || 0);
-  touchStreak(progress);
-  await progress.save();
-  return progress;
+  return withCourse(userId, courseId, async (course) => {
+    course.totalMinutesSpent += Math.max(0, Number(minutes) || 0);
+    touchStreak(course);
+  });
 }
 
-/**
- * Merge browser-local progress into Mongo (login migration).
- * localPayload shape:
- * {
- *   completedMap?: { [lessonId]: { xp, at, title?, chapterId?, chapterTitle? } },
- *   savedCodeMap?: { [lessonId]: string },
- *   notesMap?: { [lessonId]: string },
- *   bookmarks?: string[],
- *   lastLessonId?: string,
- *   engagementMap?: { [lessonId]: { read?, confidence?, quizAttempts? } }
- * }
- */
 async function mergeLocalProgress(userId, courseId, localPayload = {}) {
-  const progress = await getOrCreateProgress(userId, courseId);
-  const completedMap = localPayload.completedMap || {};
-  const savedCodeMap = localPayload.savedCodeMap || {};
-  const notesMap = localPayload.notesMap || {};
-  const engagementMap = localPayload.engagementMap || {};
-  const bookmarks = Array.isArray(localPayload.bookmarks)
-    ? localPayload.bookmarks
-    : [];
+  return withCourse(userId, courseId, async (course) => {
+    const completedMap = localPayload.completedMap || {};
+    const savedCodeMap = localPayload.savedCodeMap || {};
+    const notesMap = localPayload.notesMap || {};
+    const engagementMap = localPayload.engagementMap || {};
+    const bookmarks = Array.isArray(localPayload.bookmarks)
+      ? localPayload.bookmarks
+      : [];
 
-  for (const [lessonId, meta] of Object.entries(completedMap)) {
-    const existing = progress.completedLessons.find(
-      (item) => item.lessonId === lessonId,
-    );
-    const localAt = meta?.at ? new Date(meta.at) : null;
-    if (!existing) {
-      progress.completedLessons.push({
+    for (const [lessonId, meta] of Object.entries(completedMap)) {
+      const existing = course.completedLessons.find(
+        (item) => item.lessonId === lessonId,
+      );
+      const localAt = meta?.at ? new Date(meta.at) : null;
+      if (!existing) {
+        course.completedLessons.push({
+          lessonId,
+          title: meta?.title || "",
+          chapterId: meta?.chapterId || "",
+          chapterTitle: meta?.chapterTitle || "",
+          xp: Number(meta?.xp) || 0,
+          completedAt:
+            localAt && !Number.isNaN(localAt.getTime()) ? localAt : new Date(),
+        });
+      } else if (
+        localAt &&
+        !Number.isNaN(localAt.getTime()) &&
+        existing.completedAt &&
+        localAt > new Date(existing.completedAt)
+      ) {
+        existing.xp = Number(meta?.xp) || existing.xp || 0;
+        if (meta?.title) existing.title = meta.title;
+        existing.completedAt = localAt;
+      }
+    }
+
+    for (const [lessonId, code] of Object.entries(savedCodeMap)) {
+      const existing = course.savedCode.find((item) => item.lessonId === lessonId);
+      if (existing) {
+        if (!existing.code && code) {
+          existing.code = code;
+          existing.updatedAt = new Date();
+        }
+      } else if (typeof code === "string") {
+        course.savedCode.push({ lessonId, code, updatedAt: new Date() });
+      }
+    }
+
+    for (const [lessonId, note] of Object.entries(notesMap)) {
+      const existing = course.notes.find((item) => item.lessonId === lessonId);
+      if (existing) {
+        if (!existing.note && note) {
+          existing.note = note;
+          existing.updatedAt = new Date();
+        }
+      } else if (typeof note === "string") {
+        course.notes.push({ lessonId, note, updatedAt: new Date() });
+      }
+    }
+
+    for (const [lessonId, engagement] of Object.entries(engagementMap)) {
+      upsertEngagementEntry(course, {
         lessonId,
-        title: meta?.title || "",
-        chapterId: meta?.chapterId || "",
-        chapterTitle: meta?.chapterTitle || "",
-        xp: Number(meta?.xp) || 0,
-        completedAt: localAt && !Number.isNaN(localAt.getTime()) ? localAt : new Date(),
+        read: engagement?.read,
+        confidence: engagement?.confidence,
+        quizAttempts: engagement?.quizAttempts,
       });
-    } else if (
-      localAt &&
-      !Number.isNaN(localAt.getTime()) &&
-      existing.completedAt &&
-      localAt > new Date(existing.completedAt)
-    ) {
-      existing.xp = Number(meta?.xp) || existing.xp || 0;
-      if (meta?.title) existing.title = meta.title;
-      existing.completedAt = localAt;
     }
-  }
 
-  for (const [lessonId, code] of Object.entries(savedCodeMap)) {
-    const existing = progress.savedCode.find((item) => item.lessonId === lessonId);
-    if (existing) {
-      if (!existing.code && code) {
-        existing.code = code;
-        existing.updatedAt = new Date();
-      }
-    } else if (typeof code === "string") {
-      progress.savedCode.push({ lessonId, code, updatedAt: new Date() });
+    const bookmarkSet = new Set([...(course.bookmarks || []), ...bookmarks]);
+    course.bookmarks = Array.from(bookmarkSet);
+
+    if (localPayload.lastLessonId && !course.lastLessonId) {
+      course.lastLessonId = localPayload.lastLessonId;
     }
-  }
 
-  for (const [lessonId, note] of Object.entries(notesMap)) {
-    const existing = progress.notes.find((item) => item.lessonId === lessonId);
-    if (existing) {
-      if (!existing.note && note) {
-        existing.note = note;
-        existing.updatedAt = new Date();
-      }
-    } else if (typeof note === "string") {
-      progress.notes.push({ lessonId, note, updatedAt: new Date() });
-    }
-  }
-
-  for (const [lessonId, engagement] of Object.entries(engagementMap)) {
-    upsertEngagementEntry(progress, {
-      lessonId,
-      read: engagement?.read,
-      confidence: engagement?.confidence,
-      quizAttempts: engagement?.quizAttempts,
-    });
-  }
-
-  const bookmarkSet = new Set([...(progress.bookmarks || []), ...bookmarks]);
-  progress.bookmarks = Array.from(bookmarkSet);
-
-  if (localPayload.lastLessonId && !progress.lastLessonId) {
-    progress.lastLessonId = localPayload.lastLessonId;
-  }
-
-  recalcTotalXp(progress);
-  touchStreak(progress);
-  await progress.save();
-  return progress;
+    recalcTotalXp(course);
+    touchStreak(course);
+  });
 }
 
 function dayKey(date = new Date()) {

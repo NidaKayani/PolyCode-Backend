@@ -125,19 +125,6 @@ router.get(
   progressController.getPolycoderDailyPoints,
 );
 
-router.get(
-  "/progress/:userId/:language",
-  progressController.getLanguageProgress,
-);
-router.get("/progress/:userId", progressController.getAllProgress);
-router.post("/progress/mark-module", progressController.markModuleComplete);
-router.post("/progress/mark-document", progressController.markDocumentComplete);
-router.post("/progress/bookmark", progressController.toggleBookmark);
-router.post("/progress/add-time", progressController.addTimeSpent);
-router.post(
-  "/progress/mark-language-complete",
-  progressController.markLanguageComplete,
-);
 router.get("/progress/dashboard/:userId", progressController.getDashboardStats);
 
 // ── Learn: Shared Course Progress Routes ─────────────────────────────────────
@@ -215,7 +202,7 @@ router.post(
   lessonAnnotationController.mergeAnnotations,
 );
 
-// ── Learn: OOP C++ Progress Routes (legacy aliases → shared CourseProgress) ──
+// ── Learn: OOP C++ Progress Routes (legacy aliases → shared course API) ──
 
 router.get(
   "/learn/oops-cpp/progress",

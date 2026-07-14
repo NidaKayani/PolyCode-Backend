@@ -1,5 +1,8 @@
-const LessonAnnotation = require("../models/LessonAnnotation");
 const { assertCourseId } = require("../constants/courseIds");
+const {
+  getOrCreateLearnerDoc,
+  saveLearnerDoc,
+} = require("./learnerProgressStore");
 
 const MAX_PAYLOAD_BYTES = 100 * 1024;
 
@@ -81,20 +84,27 @@ function normalizeTab(tab) {
   return tab === "challenge" ? "challenge" : "theory";
 }
 
+function findAnnotation(learner, courseId, lessonId, tab) {
+  return (learner.annotations || []).find(
+    (row) =>
+      row.courseId === courseId &&
+      row.lessonId === lessonId &&
+      row.tab === tab,
+  );
+}
+
 async function getAnnotation(userId, courseId, lessonId, tab = "theory") {
   const id = assertCourseId(courseId);
-  const doc = await LessonAnnotation.findOne({
-    userId,
-    courseId: id,
-    lessonId: String(lessonId || "").trim(),
-    tab: normalizeTab(tab),
-  }).lean();
+  const cleanLessonId = String(lessonId || "").trim();
+  const cleanTab = normalizeTab(tab);
+  const learner = await getOrCreateLearnerDoc(userId);
+  const doc = findAnnotation(learner, id, cleanLessonId, cleanTab);
 
   if (!doc) {
     return {
       courseId: id,
-      lessonId: String(lessonId || "").trim(),
-      tab: normalizeTab(tab),
+      lessonId: cleanLessonId,
+      tab: cleanTab,
       strokes: [],
       labels: [],
       updatedAt: null,
@@ -120,22 +130,28 @@ async function putAnnotation(userId, courseId, lessonId, tab, payload = {}) {
     throw error;
   }
 
+  const cleanTab = normalizeTab(tab);
   const fitted = fitWithinLimit(payload);
-  const doc = await LessonAnnotation.findOneAndUpdate(
-    {
-      userId,
+  const learner = await getOrCreateLearnerDoc(userId);
+  let doc = findAnnotation(learner, id, cleanLessonId, cleanTab);
+
+  if (!doc) {
+    learner.annotations.push({
       courseId: id,
       lessonId: cleanLessonId,
-      tab: normalizeTab(tab),
-    },
-    {
-      $set: {
-        strokes: fitted.data.strokes,
-        labels: fitted.data.labels,
-      },
-    },
-    { upsert: true, new: true, setDefaultsOnInsert: true },
-  ).lean();
+      tab: cleanTab,
+      strokes: fitted.data.strokes,
+      labels: fitted.data.labels,
+      updatedAt: new Date(),
+    });
+    doc = learner.annotations[learner.annotations.length - 1];
+  } else {
+    doc.strokes = fitted.data.strokes;
+    doc.labels = fitted.data.labels;
+    doc.updatedAt = new Date();
+  }
+
+  await saveLearnerDoc(learner);
 
   return {
     courseId: doc.courseId,

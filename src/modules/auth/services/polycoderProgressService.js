@@ -1,7 +1,5 @@
 const User = require("../models/User");
-const UserProgress = require("../models/UserProgress");
-const OopsCppProgress = require("../models/OopsCppProgress");
-const CourseProgress = require("../models/CourseProgress");
+const courseProgressService = require("./courseProgressService");
 const dailyXpService = require("./dailyXpService");
 
 function normalizeUsername(username) {
@@ -15,27 +13,6 @@ function isValidUsername(username) {
 function formatDate(value) {
   if (!value) return null;
   return new Date(value).toISOString();
-}
-
-function serializeLanguageTrack(entry) {
-  if (!entry) return null;
-
-  return {
-    language: entry.language,
-    status: entry.status || "not-started",
-    progressPercent: entry.progressPercentage ?? 0,
-    minutesSpent: entry.totalMinutesSpent ?? 0,
-    currentStreak: entry.currentStreak ?? 0,
-    highestStreak: entry.highestStreak ?? 0,
-    lastAccessedModule: entry.lastAccessedModule ?? null,
-    completedModules: entry.completedModules ?? [],
-    completedDocuments: (entry.completedDocuments ?? []).map((doc) => ({
-      path: doc.path,
-      title: doc.title,
-      completedAt: formatDate(doc.completedAt),
-    })),
-    bookmarksCount: entry.bookmarkedDocuments?.length ?? 0,
-  };
 }
 
 function serializeOopsCpp(course) {
@@ -161,8 +138,7 @@ function serializeCourseRow(course) {
   };
 }
 
-function buildOverview({ user, languageProgress, courseDocs, dailyXp }) {
-  const languages = languageProgress || [];
+function buildOverview({ user, courseDocs, dailyXp }) {
   const courses = courseDocs || [];
   const courseXp = courses.reduce((sum, doc) => sum + (doc.totalXp || 0), 0);
   const courseMinutes = courses.reduce(
@@ -186,18 +162,11 @@ function buildOverview({ user, languageProgress, courseDocs, dailyXp }) {
   );
 
   return {
-    languagesStarted: languages.length,
-    languagesCompleted: languages.filter((entry) => entry.status === "completed")
-      .length,
-    languagesInProgress: languages.filter((entry) => entry.status === "in-progress")
-      .length,
-    totalMinutesSpent:
-      languages.reduce((sum, entry) => sum + (entry.totalMinutesSpent || 0), 0) +
-      courseMinutes,
-    totalDocumentsCompleted: languages.reduce(
-      (sum, entry) => sum + (entry.completedDocuments?.length || 0),
-      0,
-    ),
+    languagesStarted: 0,
+    languagesCompleted: 0,
+    languagesInProgress: 0,
+    totalMinutesSpent: courseMinutes,
+    totalDocumentsCompleted: 0,
     completedLessonsCount: courses.reduce(
       (sum, doc) => sum + (doc.completedLessons?.length || 0),
       0,
@@ -215,7 +184,6 @@ function buildOverview({ user, languageProgress, courseDocs, dailyXp }) {
     currentStreak: Math.max(
       user?.currentStreak || 0,
       ...courseStreaks,
-      ...languages.map((entry) => entry.currentStreak || 0),
       0,
     ),
     highestStreak: user?.highestStreak || 0,
@@ -247,21 +215,10 @@ async function getProgressByUsername(username) {
 
   const userId = user._id;
 
-  const [languageProgress, allCourses, legacyOops, dailyXp] = await Promise.all([
-    UserProgress.find({ userId }).lean(),
-    CourseProgress.find({ userId }).lean(),
-    OopsCppProgress.findOne({ userId }).lean(),
+  const [courseDocs, dailyXp] = await Promise.all([
+    courseProgressService.listProgressForUser(userId, { includePrivate: true }),
     dailyXpService.getDailyXp(userId),
   ]);
-
-  const courseDocs = [...allCourses];
-  if (!courseDocs.some((doc) => doc.courseId === "oops-cpp") && legacyOops) {
-    courseDocs.push({
-      ...legacyOops,
-      courseId: "oops-cpp",
-      lessonEngagement: [],
-    });
-  }
 
   const oopsCppProgress =
     courseDocs.find((doc) => doc.courseId === "oops-cpp") || null;
@@ -285,7 +242,6 @@ async function getProgressByUsername(username) {
 
   const overview = buildOverview({
     user,
-    languageProgress,
     courseDocs,
     dailyXp,
   });
@@ -302,9 +258,7 @@ async function getProgressByUsername(username) {
     generatedAt: new Date().toISOString(),
     profile,
     overview,
-    languageTracks: (languageProgress || [])
-      .map(serializeLanguageTrack)
-      .filter(Boolean),
+    languageTracks: [],
     courses: coursesById,
     pointsByDay: buildPointsByDay(dailyXp),
     dailyXp: dailyXpPayload,

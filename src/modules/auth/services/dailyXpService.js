@@ -1,17 +1,12 @@
-const DailyXpProgress = require("../models/DailyXpProgress");
+const {
+  getOrCreateLearnerDoc,
+  saveLearnerDoc,
+} = require("./learnerProgressStore");
 
 const READ_BONUS_XP = 3;
 
 function toDateKey(date = new Date()) {
   return new Date(date).toISOString().slice(0, 10);
-}
-
-async function getOrCreate(userId) {
-  let progress = await DailyXpProgress.findOne({ userId });
-  if (!progress) {
-    progress = await DailyXpProgress.create({ userId, days: [], totalXp: 0 });
-  }
-  return progress;
 }
 
 function formatLesson(lesson) {
@@ -51,22 +46,22 @@ function formatDay(day) {
   };
 }
 
-function formatResponse(progress) {
-  const days = [...(progress.days || [])]
+function formatResponse(dailyXp) {
+  const days = [...(dailyXp?.days || [])]
     .sort((a, b) => b.dateKey.localeCompare(a.dateKey))
     .map(formatDay);
 
   return {
     days,
-    totalXp: progress.totalXp || 0,
+    totalXp: dailyXp?.totalXp || 0,
     unreadDays: days.filter((day) => !day.read).length,
     readBonusXp: READ_BONUS_XP,
   };
 }
 
 async function getDailyXp(userId) {
-  const progress = await getOrCreate(userId);
-  return formatResponse(progress);
+  const learner = await getOrCreateLearnerDoc(userId);
+  return formatResponse(learner.dailyXp);
 }
 
 async function recordDailyXp(userId, payload = {}) {
@@ -81,14 +76,19 @@ async function recordDailyXp(userId, payload = {}) {
     return getDailyXp(userId);
   }
 
-  const progress = await getOrCreate(userId);
+  const learner = await getOrCreateLearnerDoc(userId);
+  if (!learner.dailyXp) {
+    learner.dailyXp = { days: [], totalXp: 0 };
+  }
+  if (!Array.isArray(learner.dailyXp.days)) {
+    learner.dailyXp.days = [];
+  }
+
   const dateKey = toDateKey();
-  let day = progress.days.find((entry) => entry.dateKey === dateKey);
+  let day = learner.dailyXp.days.find((entry) => entry.dateKey === dateKey);
 
   if (!day) {
-    // push() casts the plain object into a subdocument copy, so grab the
-    // casted subdoc back — mutating the original object would be lost on save.
-    progress.days.push({
+    learner.dailyXp.days.push({
       dateKey,
       lessons: [],
       lessonXp: 0,
@@ -96,11 +96,11 @@ async function recordDailyXp(userId, payload = {}) {
       read: false,
       readAt: null,
     });
-    day = progress.days[progress.days.length - 1];
+    day = learner.dailyXp.days[learner.dailyXp.days.length - 1];
   }
 
   if (day.lessons.some((lesson) => lesson.lessonId === lessonId)) {
-    return formatResponse(progress);
+    return formatResponse(learner.dailyXp);
   }
 
   day.lessons.push({
@@ -111,11 +111,10 @@ async function recordDailyXp(userId, payload = {}) {
     recordedAt: new Date(),
   });
   day.lessonXp = (day.lessonXp || 0) + xpAmount;
-  progress.totalXp = (progress.totalXp || 0) + xpAmount;
-  progress.markModified("days");
-  await progress.save();
+  learner.dailyXp.totalXp = (learner.dailyXp.totalXp || 0) + xpAmount;
+  await saveLearnerDoc(learner);
 
-  return formatResponse(progress);
+  return formatResponse(learner.dailyXp);
 }
 
 async function markDailyXpRead(userId, date) {
@@ -123,25 +122,28 @@ async function markDailyXpRead(userId, date) {
     throw new Error("date is required");
   }
 
-  const progress = await getOrCreate(userId);
-  const day = progress.days.find((entry) => entry.dateKey === date);
+  const learner = await getOrCreateLearnerDoc(userId);
+  if (!learner.dailyXp?.days) {
+    throw new Error("No progress found for that date");
+  }
+
+  const day = learner.dailyXp.days.find((entry) => entry.dateKey === date);
 
   if (!day) {
     throw new Error("No progress found for that date");
   }
 
   if (day.read) {
-    return formatResponse(progress);
+    return formatResponse(learner.dailyXp);
   }
 
   day.read = true;
   day.readBonusXp = READ_BONUS_XP;
   day.readAt = new Date();
-  progress.totalXp = (progress.totalXp || 0) + READ_BONUS_XP;
-  progress.markModified("days");
-  await progress.save();
+  learner.dailyXp.totalXp = (learner.dailyXp.totalXp || 0) + READ_BONUS_XP;
+  await saveLearnerDoc(learner);
 
-  return formatResponse(progress);
+  return formatResponse(learner.dailyXp);
 }
 
 module.exports = {

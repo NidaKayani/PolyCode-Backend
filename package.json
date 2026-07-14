@@ -9,6 +9,7 @@
     "dev": "nodemon server.js",
     "db:setup": "node scripts/mongodb-setup.js",
     "db:test": "node scripts/test-mongodb-connection.js",
+    "clean-db": "node scripts/clean-db.js",
     "curriculum:seed": "node scripts/seed-numbered-curriculum.js",
     "curriculum:seed:force": "node scripts/seed-numbered-curriculum.js --force",
     "curriculum:consolidate": "node scripts/consolidate-language-data.js",
