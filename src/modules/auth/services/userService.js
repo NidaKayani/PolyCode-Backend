@@ -93,7 +93,7 @@ async function syncFollowersToMainDb(userDoc) {
  */
 async function registerUser(userData) {
   try {
-    const { email, username, password, firstName, lastName } = userData;
+    const { email, username, password } = userData;
 
     // Check if user already exists
     const existingUser = await User.findOne({
@@ -104,12 +104,11 @@ async function registerUser(userData) {
       throw new Error("Email or username already in use");
     }
 
+    // Lean doc: only email + username + password
     const user = new User({
       email,
       username,
       password,
-      firstName: capitalizeNamePart(firstName),
-      lastName: capitalizeNamePart(lastName),
     });
 
     await user.save();
@@ -133,6 +132,12 @@ async function loginUser(email, password) {
       throw new Error("Invalid email or password");
     }
 
+    if (!user.password) {
+      throw new Error(
+        "This account uses Google Sign-In. Please continue with Google.",
+      );
+    }
+
     const isPasswordValid = await user.comparePassword(password);
 
     if (!isPasswordValid) {
@@ -147,6 +152,78 @@ async function loginUser(email, password) {
   } catch (error) {
     throw error;
   }
+}
+
+/**
+ * Sign in / sign up with a verified Google ID token payload.
+ * @param {object} profile - { googleId, email, firstName, lastName, picture }
+ */
+async function loginOrRegisterWithGoogle(profile = {}) {
+  const googleId = String(profile.googleId || "").trim();
+  const email = String(profile.email || "")
+    .trim()
+    .toLowerCase();
+
+  if (!googleId || !email) {
+    throw new Error("Google account email is required");
+  }
+
+  let user = await User.findOne({ googleId });
+
+  if (!user) {
+    user = await User.findOne({ email });
+  }
+
+  if (user) {
+    if (!user.googleId) {
+      user.googleId = googleId;
+    }
+    if (!user.authProvider) {
+      user.authProvider = user.password ? "local" : "google";
+    }
+    const first = capitalizeNamePart(profile.firstName || "");
+    const last = capitalizeNamePart(profile.lastName || "");
+    if (first && !user.firstName) user.firstName = first;
+    if (last && !user.lastName) user.lastName = last;
+    if (profile.picture && !user.profilePicture) {
+      user.profilePicture = profile.picture;
+    }
+    user.lastLogin = new Date();
+    await user.save();
+    return toPublicUser(user);
+  }
+
+  const emailLocal = email.split("@")[0] || "user";
+  let base = slugifyUsername(emailLocal);
+  if (base.length < 3) {
+    base = `user_${googleId.slice(-6)}`;
+  }
+
+  let username = base;
+  let suffix = 0;
+  while (await User.findOne({ username })) {
+    suffix += 1;
+    username = `${base.slice(0, 24)}_${suffix}`;
+  }
+
+  // Lean Google account: email + username + googleId (no password)
+  const createPayload = {
+    email,
+    username,
+    googleId,
+    authProvider: "google",
+    lastLogin: new Date(),
+  };
+  const first = capitalizeNamePart(profile.firstName || "");
+  const last = capitalizeNamePart(profile.lastName || "");
+  if (first) createPayload.firstName = first;
+  if (last) createPayload.lastName = last;
+  if (profile.picture) createPayload.profilePicture = profile.picture;
+
+  user = new User(createPayload);
+
+  await user.save();
+  return toPublicUser(user);
 }
 
 /**
@@ -180,7 +257,7 @@ async function getUserByUsername(username) {
 
     const user = await User.findOne({
       username: normalizedUsername,
-      isActive: true,
+      isActive: { $ne: false },
     });
 
     if (!user) {
@@ -234,7 +311,7 @@ async function listUserConnections(username, type) {
 
   const user = await User.findOne({
     username: normalizedUsername,
-    isActive: true,
+    isActive: { $ne: false },
   }).select("followers following");
 
   if (!user) {
@@ -246,7 +323,7 @@ async function listUserConnections(username, type) {
     return [];
   }
 
-  const users = await User.find({ _id: { $in: ids }, isActive: true })
+  const users = await User.find({ _id: { $in: ids }, isActive: { $ne: false } })
     .select(
       "username firstName lastName email bio profilePicture profilePictureDriveId followersCount followingCount",
     )
@@ -330,7 +407,7 @@ async function setFollowRelationship(currentUserId, targetUsername, shouldFollow
 
   const [currentUser, targetUser] = await Promise.all([
     User.findById(currentUserId),
-    User.findOne({ username: normalizedUsername, isActive: true }),
+    User.findOne({ username: normalizedUsername, isActive: { $ne: false } }),
   ]);
 
   if (!currentUser) {
@@ -398,6 +475,12 @@ async function changePassword(userId, oldPassword, newPassword) {
       throw new Error("User not found");
     }
 
+    if (!user.password) {
+      throw new Error(
+        "This Google account has no password. Sign in with Google, or set a password from account settings after linking.",
+      );
+    }
+
     const isPasswordValid = await user.comparePassword(oldPassword);
 
     if (!isPasswordValid) {
@@ -456,6 +539,7 @@ async function setProfilePicture(userId, { url, driveFileId }) {
 module.exports = {
   registerUser,
   loginUser,
+  loginOrRegisterWithGoogle,
   getUserById,
   getUserByUsername,
   getUserByEmail,

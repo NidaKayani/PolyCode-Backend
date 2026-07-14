@@ -205,7 +205,7 @@ async function getProgressByUsername(username) {
     throw error;
   }
 
-  const user = await User.findOne({ username: polycoder, isActive: true }).lean();
+  const user = await User.findOne({ username: polycoder, isActive: { $ne: false } }).lean();
 
   if (!user) {
     const error = new Error("Polycoder not found");

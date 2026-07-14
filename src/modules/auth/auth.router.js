@@ -16,6 +16,9 @@ router.post("/register", userController.register);
 /** POST /api/auth/login */
 router.post("/login", userController.login);
 
+/** POST /api/auth/google — Continue with Google (ID token) */
+router.post("/google", userController.googleAuth);
+
 /** GET /api/auth/me  — returns current user from Bearer token */
 router.get("/me", requireAuth, userController.getMe);
 

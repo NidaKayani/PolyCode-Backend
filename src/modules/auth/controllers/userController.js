@@ -73,6 +73,65 @@ async function login(req, res) {
 }
 
 /**
+ * POST /api/auth/google - Continue with Google (ID token)
+ */
+async function googleAuth(req, res) {
+  try {
+    const { idToken } = req.body;
+    if (!idToken) {
+      return res.status(400).json({ error: "Google idToken is required" });
+    }
+
+    const clientId =
+      process.env.GOOGLE_CLIENT_ID ||
+      process.env.GOOGLE_DRIVE_OAUTH_CLIENT_ID ||
+      "";
+
+    if (!clientId) {
+      return res.status(503).json({
+        error:
+          "Google Sign-In is not configured. Set GOOGLE_CLIENT_ID on the server.",
+      });
+    }
+
+    const { OAuth2Client } = require("google-auth-library");
+    const client = new OAuth2Client(clientId);
+    const ticket = await client.verifyIdToken({
+      idToken,
+      audience: clientId,
+    });
+    const payload = ticket.getPayload();
+
+    if (!payload?.sub || !payload?.email) {
+      return res.status(401).json({ error: "Invalid Google token" });
+    }
+
+    if (payload.email_verified === false) {
+      return res.status(401).json({ error: "Google email is not verified" });
+    }
+
+    const user = await userService.loginOrRegisterWithGoogle({
+      googleId: payload.sub,
+      email: payload.email,
+      firstName: payload.given_name || "",
+      lastName: payload.family_name || "",
+      picture: payload.picture || null,
+    });
+
+    const token = createToken(user._id);
+
+    res.json({
+      message: "Google sign-in successful",
+      token,
+      user,
+    });
+  } catch (error) {
+    console.error("Google auth error:", error.message);
+    res.status(401).json({ error: error.message || "Google sign-in failed" });
+  }
+}
+
+/**
  * GET /api/auth/user/:id - Get user by ID
  */
 async function getUserProfile(req, res) {
@@ -366,6 +425,7 @@ async function deleteAccount(req, res) {
 module.exports = {
   register,
   login,
+  googleAuth,
   getMe,
   getUserProfile,
   getUserByUsername,

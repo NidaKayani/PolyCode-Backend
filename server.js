@@ -223,17 +223,30 @@ app.use((req, res, next) => {
 });
 
 if (rateLimit) {
-  app.use(
-    "/api/",
-    rateLimit({
-      windowMs: 15 * 60 * 1000,
-      max: 100,
-      message: "Too many requests from this IP, please try again later.",
-      standardHeaders: true,
-      legacyHeaders: false,
-    }),
-  );
-  console.log("✅ Rate limiting enabled");
+  const isProd = process.env.NODE_ENV === "production";
+  const rateLimitDisabled =
+    process.env.RATE_LIMIT_DISABLED === "1" ||
+    process.env.RATE_LIMIT_DISABLED === "true" ||
+    (!isProd && process.env.RATE_LIMIT_DISABLED !== "0");
+
+  if (rateLimitDisabled) {
+    console.log("⚠️  Rate limiting disabled (dev / RATE_LIMIT_DISABLED)");
+  } else {
+    const windowMs = Number(process.env.RATE_LIMIT_WINDOW_MS) || 15 * 60 * 1000;
+    const max =
+      Number(process.env.RATE_LIMIT_MAX) || (isProd ? 500 : 5000);
+    app.use(
+      "/api/",
+      rateLimit({
+        windowMs,
+        max,
+        message: "Too many requests from this IP, please try again later.",
+        standardHeaders: true,
+        legacyHeaders: false,
+      }),
+    );
+    console.log(`✅ Rate limiting enabled (${max} req / ${windowMs}ms)`);
+  }
 }
 
 // ─── Docs routes ──────────────────────────────────────────────────────────────

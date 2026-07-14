@@ -1,7 +1,11 @@
-const mongoose = require("mongoose"); //Used to connect Node.js with MongoDB.
-const bcrypt = require("bcryptjs"); //Used to hash and compare passwords.
+const mongoose = require("mongoose");
+const bcrypt = require("bcryptjs");
 
-// ── User schema ───────────────────────────────────────────────────────────────
+/**
+ * Auth user — documents stay lean.
+ * New email/password accounts store: email, username, password (+ _id / timestamps).
+ * Optional profile / Google fields are only written when set.
+ */
 const userSchema = new mongoose.Schema(
   {
     email: {
@@ -29,106 +33,59 @@ const userSchema = new mongoose.Schema(
     },
     password: {
       type: String,
-      required: [true, "Please provide a password"],
+      required: false,
       minlength: 6,
-      select: false, // Don't return password by default
+      select: false,
     },
-    firstName: {
+    // Optional — only present when used
+    googleId: {
       type: String,
-      trim: true,
+      unique: true,
+      sparse: true,
     },
-    lastName: {
+    authProvider: {
       type: String,
-      trim: true,
+      enum: ["local", "google"],
     },
-    profilePicture: {
-      type: String,
-      default: null,
-    },
-    profilePictureDriveId: {
-      type: String,
-      default: null,
-    },
-    bio: {
-      type: String,
-      default: "",
-    },
-    followersCount: {
-      type: Number,
-      default: 0,
-      min: 0,
-    },
-    followers: {
-      type: [mongoose.Schema.Types.ObjectId],
-      ref: "User",
-      default: [],
-    },
-    followingCount: {
-      type: Number,
-      default: 0,
-      min: 0,
-    },
-    following: {
-      type: [mongoose.Schema.Types.ObjectId],
-      ref: "User",
-      default: [],
-    },
-    preferredLanguages: {
-      type: [String],
-      default: [],
-    },
-    isActive: {
-      type: Boolean,
-      default: true,
-    },
-    lastLogin: {
-      type: Date,
-      default: null,
-    },
-    currentStreak: {
-      type: Number,
-      default: 0,
-    },
-    highestStreak: {
-      type: Number,
-      default: 0,
-    },
-    lastChallengeDate: {
-      type: Date,
-      default: null,
-    },
-    createdAt: {
-      type: Date,
-      default: Date.now,
-    },
-    updatedAt: {
-      type: Date,
-      default: Date.now,
-    },
+    firstName: { type: String, trim: true },
+    lastName: { type: String, trim: true },
+    profilePicture: { type: String },
+    profilePictureDriveId: { type: String },
+    bio: { type: String },
+    followersCount: { type: Number, min: 0 },
+    followers: { type: [mongoose.Schema.Types.ObjectId], ref: "User" },
+    followingCount: { type: Number, min: 0 },
+    following: { type: [mongoose.Schema.Types.ObjectId], ref: "User" },
+    preferredLanguages: { type: [String] },
+    isActive: { type: Boolean },
+    lastLogin: { type: Date },
+    currentStreak: { type: Number },
+    highestStreak: { type: Number },
+    lastChallengeDate: { type: Date },
   },
   {
     timestamps: true,
-  }
+    minimize: true,
+  },
 );
 
-// Hash password before saving
 userSchema.pre("save", async function () {
-  // Only hash password if it has been modified
   if (!this.isModified("password")) return;
+  if (!this.password) return;
 
   const salt = await bcrypt.genSalt(10);
   this.password = await bcrypt.hash(this.password, salt);
 });
 
-// Method to compare passwords
 userSchema.methods.comparePassword = async function (enteredPassword) {
-  return await bcrypt.compare(enteredPassword, this.password);
+  if (!this.password) return false;
+  return bcrypt.compare(enteredPassword, this.password);
 };
 
-// Method to get user data without sensitive info
 userSchema.methods.toJSON = function () {
   const user = this.toObject();
   delete user.password;
+  delete user.googleId;
   return user;
 };
 

@@ -71,6 +71,7 @@ function ensureCourseEntry(learner, courseId) {
 
 /**
  * Persist learner doc with size guard against Mongo's 16MB limit.
+ * Retries once on VersionError (parallel profile fetches / writes).
  */
 async function saveLearnerDoc(learner) {
   const size = Buffer.byteLength(JSON.stringify(learner.toObject()), "utf8");
@@ -93,7 +94,17 @@ async function saveLearnerDoc(learner) {
   learner.markModified("courses");
   learner.markModified("dailyXp");
   learner.markModified("annotations");
-  await learner.save();
+  try {
+    await learner.save();
+  } catch (error) {
+    if (error?.name === "VersionError") {
+      // Another request saved first — reload and fail soft for reads;
+      // writers should re-apply via higher-level retry if needed.
+      error.statusCode = 409;
+      error.message = "Progress was updated by another request; please retry";
+    }
+    throw error;
+  }
   // #region agent log
   agentLog({
     location: "learnerProgressStore.js:saveLearnerDoc",

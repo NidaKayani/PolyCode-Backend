@@ -14,6 +14,19 @@ async function getProgress(req, res) {
     );
     res.json({ progress });
   } catch (error) {
+    // #region agent log
+    agentLog({
+      location: "courseProgressController.js:getProgress",
+      message: "getProgress error",
+      data: {
+        courseId: req.params.courseId,
+        error: error.message,
+        name: error.name,
+        statusCode: error.statusCode,
+      },
+      hypothesisId: "H1",
+    });
+    // #endregion
     res.status(statusFromError(error)).json({ error: error.message });
   }
 }
@@ -34,7 +47,7 @@ async function listPublicProgress(req, res) {
     const username = String(req.params.username || "")
       .trim()
       .toLowerCase();
-    const user = await User.findOne({ username, isActive: true }).select("_id");
+    const user = await User.findOne({ username, isActive: { $ne: false } }).select("_id");
     if (!user) {
       return res.status(404).json({ error: "User not found" });
     }
@@ -228,7 +241,7 @@ async function getPublicDashboard(req, res) {
     const username = String(req.params.username || "")
       .trim()
       .toLowerCase();
-    const user = await User.findOne({ username, isActive: true }).select("_id");
+    const user = await User.findOne({ username, isActive: { $ne: false } }).select("_id");
     if (!user) {
       return res.status(404).json({ error: "User not found" });
     }

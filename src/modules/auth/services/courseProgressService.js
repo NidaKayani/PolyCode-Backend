@@ -44,10 +44,26 @@ async function withCourse(userId, courseId, mutator) {
 
 async function getOrCreateProgress(userId, courseId) {
   const id = assertCourseId(courseId);
+
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    const learner = await getOrCreateLearnerDoc(userId);
+    const existed = (learner.courses || []).some((item) => item.courseId === id);
+    const course = ensureCourseEntry(learner, id);
+    if (existed) {
+      return courseToProgress(course, userId);
+    }
+    try {
+      await saveLearnerDoc(learner);
+      return courseToProgress(course, userId);
+    } catch (error) {
+      if (error?.name !== "VersionError" && error?.statusCode !== 409) {
+        throw error;
+      }
+    }
+  }
+
   const learner = await getOrCreateLearnerDoc(userId);
-  const course = ensureCourseEntry(learner, id);
-  await saveLearnerDoc(learner);
-  return courseToProgress(course, userId);
+  return courseToProgress(ensureCourseEntry(learner, id), userId);
 }
 
 async function getProgress(userId, courseId) {
@@ -210,7 +226,7 @@ async function upsertLessonEngagement(userId, courseId, payload = {}) {
 }
 
 async function completeLesson(userId, courseId, lesson) {
-  return withCourse(userId, courseId, async (course) => {
+  return withCourse(userId, courseId, async (course, learner) => {
     const lessonId = lesson.lessonId || lesson.id;
     if (!lessonId) {
       throw new Error("lessonId is required");
@@ -222,15 +238,24 @@ async function completeLesson(userId, courseId, lesson) {
     const wasNew = !existing;
 
     if (!existing) {
+      const completedAt = new Date();
       course.completedLessons.push({
         lessonId,
         title: lesson.title || "",
         chapterId: lesson.chapterId || "",
         chapterTitle: lesson.chapterTitle || "",
         xp: lesson.xp || 0,
-        completedAt: new Date(),
+        completedAt,
       });
       recalcTotalXp(course);
+      // Keep Learning activity graph in sync with course XP (same save).
+      dailyXpService.applyLessonXp(learner, {
+        course: courseId,
+        lessonId,
+        title: lesson.title || "",
+        xp: lesson.xp || 0,
+        recordedAt: completedAt,
+      });
     }
 
     course.lastLessonId = lessonId;
@@ -247,6 +272,8 @@ async function completeLesson(userId, courseId, lesson) {
         lessonXp: Number(lesson.xp) || 0,
         totalXp: course.totalXp,
         completedCount: course.completedLessons.length,
+        dailyXpDays: learner.dailyXp?.days?.length || 0,
+        dailyXpTotal: learner.dailyXp?.totalXp || 0,
       },
       hypothesisId: "H2",
     });
@@ -314,7 +341,7 @@ async function addTime(userId, courseId, minutes) {
 }
 
 async function mergeLocalProgress(userId, courseId, localPayload = {}) {
-  return withCourse(userId, courseId, async (course) => {
+  return withCourse(userId, courseId, async (course, learner) => {
     const completedMap = localPayload.completedMap || {};
     const savedCodeMap = localPayload.savedCodeMap || {};
     const notesMap = localPayload.notesMap || {};
@@ -329,14 +356,22 @@ async function mergeLocalProgress(userId, courseId, localPayload = {}) {
       );
       const localAt = meta?.at ? new Date(meta.at) : null;
       if (!existing) {
+        const completedAt =
+          localAt && !Number.isNaN(localAt.getTime()) ? localAt : new Date();
         course.completedLessons.push({
           lessonId,
           title: meta?.title || "",
           chapterId: meta?.chapterId || "",
           chapterTitle: meta?.chapterTitle || "",
           xp: Number(meta?.xp) || 0,
-          completedAt:
-            localAt && !Number.isNaN(localAt.getTime()) ? localAt : new Date(),
+          completedAt,
+        });
+        dailyXpService.applyLessonXp(learner, {
+          course: courseId,
+          lessonId,
+          title: meta?.title || "",
+          xp: Number(meta?.xp) || 0,
+          recordedAt: completedAt,
         });
       } else if (
         localAt &&
