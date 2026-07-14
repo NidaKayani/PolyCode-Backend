@@ -2,9 +2,9 @@ const mongoose = require("mongoose");
 const bcrypt = require("bcryptjs");
 
 /**
- * Auth user — documents stay lean.
- * New email/password accounts store: email, username, password (+ _id / timestamps).
- * Optional profile / Google fields are only written when set.
+ * Lean user documents:
+ *   { email, username, password, name }
+ * Google accounts may also store googleId (no password).
  */
 const userSchema = new mongoose.Schema(
   {
@@ -20,8 +20,8 @@ const userSchema = new mongoose.Schema(
     },
     username: {
       type: String,
+      required: [true, "Please provide a username"],
       unique: true,
-      sparse: true,
       lowercase: true,
       trim: true,
       minlength: 3,
@@ -37,35 +37,21 @@ const userSchema = new mongoose.Schema(
       minlength: 6,
       select: false,
     },
-    // Optional — only present when used
+    name: {
+      type: String,
+      trim: true,
+      maxlength: 120,
+    },
     googleId: {
       type: String,
       unique: true,
       sparse: true,
     },
-    authProvider: {
-      type: String,
-      enum: ["local", "google"],
-    },
-    firstName: { type: String, trim: true },
-    lastName: { type: String, trim: true },
-    profilePicture: { type: String },
-    profilePictureDriveId: { type: String },
-    bio: { type: String },
-    followersCount: { type: Number, min: 0 },
-    followers: { type: [mongoose.Schema.Types.ObjectId], ref: "User" },
-    followingCount: { type: Number, min: 0 },
-    following: { type: [mongoose.Schema.Types.ObjectId], ref: "User" },
-    preferredLanguages: { type: [String] },
-    isActive: { type: Boolean },
-    lastLogin: { type: Date },
-    currentStreak: { type: Number },
-    highestStreak: { type: Number },
-    lastChallengeDate: { type: Date },
   },
   {
     timestamps: true,
     minimize: true,
+    strict: true,
   },
 );
 
@@ -82,10 +68,24 @@ userSchema.methods.comparePassword = async function (enteredPassword) {
   return bcrypt.compare(enteredPassword, this.password);
 };
 
+/** Keep older UI fields working without storing them in Mongo. */
 userSchema.methods.toJSON = function () {
   const user = this.toObject();
   delete user.password;
   delete user.googleId;
+
+  const parts = String(user.name || "")
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean);
+  user.firstName = parts[0] || "";
+  user.lastName = parts.length > 1 ? parts.slice(1).join(" ") : "";
+  user.followersCount = 0;
+  user.followingCount = 0;
+  user.followers = [];
+  user.following = [];
+  user.bio = user.bio || "";
+  user.isActive = true;
   return user;
 };
 

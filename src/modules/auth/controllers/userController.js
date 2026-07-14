@@ -18,7 +18,15 @@ function createToken(userId) {
  */
 async function register(req, res) {
   try {
-    const { email, username, password, firstName, lastName } = req.body;
+    const {
+      email,
+      username,
+      password,
+      name,
+      firstName,
+      middleName,
+      lastName,
+    } = req.body;
 
     if (!email || !username || !password) {
       return res
@@ -30,7 +38,9 @@ async function register(req, res) {
       email,
       username,
       password,
+      name,
       firstName,
+      middleName,
       lastName,
     });
 
@@ -113,9 +123,9 @@ async function googleAuth(req, res) {
     const user = await userService.loginOrRegisterWithGoogle({
       googleId: payload.sub,
       email: payload.email,
+      name: payload.name || "",
       firstName: payload.given_name || "",
       lastName: payload.family_name || "",
-      picture: payload.picture || null,
     });
 
     const token = createToken(user._id);
