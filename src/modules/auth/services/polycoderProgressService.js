@@ -1,6 +1,10 @@
 const User = require("../models/User");
 const courseProgressService = require("./courseProgressService");
 const dailyXpService = require("./dailyXpService");
+const {
+  findMainUserByPolycoder,
+  normalizeEmail,
+} = require("../../../services/mainUserSyncService");
 
 function normalizeUsername(username) {
   return String(username || "").trim().toLowerCase();
@@ -8,6 +12,52 @@ function normalizeUsername(username) {
 
 function isValidUsername(username) {
   return /^[a-z0-9_][a-z0-9_.-]{2,29}$/.test(username);
+}
+
+function escapeRegex(value) {
+  return String(value).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+/**
+ * Resolve a polycoder handle to a PolyCode user.
+ * Handles: exact username, email-local alias, or quantum_logics.polycoder alias.
+ */
+async function findUserByPolycoderHandle(handle) {
+  const polycoder = normalizeUsername(handle);
+  if (!polycoder || !isValidUsername(polycoder)) return null;
+
+  let user = await User.findOne({
+    username: polycoder,
+    isActive: { $ne: false },
+  }).lean();
+  if (user) return user;
+
+  // Email local-part alias (e.g. nidakayani043 → nidakayani043@...)
+  user = await User.findOne({
+    email: {
+      $regex: `^${escapeRegex(polycoder)}@`,
+      $options: "i",
+    },
+    isActive: { $ne: false },
+  }).lean();
+  if (user) return user;
+
+  // quantum_logics.users.polycoder may be stale / differ from PolyCode username
+  try {
+    const mainUser = await findMainUserByPolycoder(polycoder);
+    const email = normalizeEmail(mainUser?.email);
+    if (email) {
+      user = await User.findOne({
+        email,
+        isActive: { $ne: false },
+      }).lean();
+      if (user) return user;
+    }
+  } catch {
+    /* MAIN_MONGODB_URI may be unset */
+  }
+
+  return null;
 }
 
 function formatDate(value) {
@@ -197,15 +247,15 @@ function buildOverview({ user, courseDocs, dailyXp }) {
  * @param {string} username
  */
 async function getProgressByUsername(username) {
-  const polycoder = normalizeUsername(username);
+  const polycoderHandle = normalizeUsername(username);
 
-  if (!isValidUsername(polycoder)) {
+  if (!isValidUsername(polycoderHandle)) {
     const error = new Error("Polycoder not found");
     error.statusCode = 404;
     throw error;
   }
 
-  const user = await User.findOne({ username: polycoder, isActive: { $ne: false } }).lean();
+  const user = await findUserByPolycoderHandle(polycoderHandle);
 
   if (!user) {
     const error = new Error("Polycoder not found");
@@ -214,6 +264,8 @@ async function getProgressByUsername(username) {
   }
 
   const userId = user._id;
+  // Prefer the real PolyCode username in responses (aliases still resolve).
+  const polycoder = normalizeUsername(user.username) || polycoderHandle;
 
   const [courseDocs, dailyXp] = await Promise.all([
     courseProgressService.listProgressForUser(userId, { includePrivate: true }),

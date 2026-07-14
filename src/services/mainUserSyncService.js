@@ -96,41 +96,47 @@ function asEmailList(value) {
   );
 }
 
+/**
+ * Quantum Logics lives on a *separate* Atlas cluster from PolyCode.
+ * Never fall back to PolyCode's connection + useDb("quantum_logics") —
+ * that DB is empty on the PolyCode cluster and makes every email look unmatched.
+ */
 async function getMainDatabase() {
   const mainDbName = getMainDatabaseName();
   const mainUri = getMainMongoUri();
 
-  if (mainUri) {
-    if (!cached.conn) {
-      if (!cached.promise) {
-        cached.promise = mongoose
-          .createConnection(mainUri, {
-            serverSelectionTimeoutMS: 20000,
-            socketTimeoutMS: 45000,
-            maxPoolSize: 5,
-          })
-          .asPromise()
-          .then((conn) => {
-            console.log("✅ Main MongoDB Connected for polycoder sync");
-            return conn;
-          })
-          .catch((error) => {
-            cached.promise = null;
-            throw error;
-          });
-      }
-
-      cached.conn = await cached.promise;
-    }
-
-    return cached.conn.useDb(mainDbName, { useCache: true });
-  }
-
-  if (mongoose.connection.readyState !== 1) {
+  if (!mainUri) {
+    console.warn(
+      "MAIN_MONGODB_URI is not set — cannot sync polycoder/followers to quantum_logics",
+    );
     return null;
   }
 
-  return mongoose.connection.useDb(mainDbName, { useCache: true });
+  if (!cached.conn) {
+    if (!cached.promise) {
+      cached.promise = mongoose
+        .createConnection(mainUri, {
+          serverSelectionTimeoutMS: 20000,
+          socketTimeoutMS: 45000,
+          maxPoolSize: 5,
+        })
+        .asPromise()
+        .then((conn) => {
+          console.log(
+            `✅ Main MongoDB Connected for polycoder sync (db=${mainDbName})`,
+          );
+          return conn;
+        })
+        .catch((error) => {
+          cached.promise = null;
+          throw error;
+        });
+    }
+
+    cached.conn = await cached.promise;
+  }
+
+  return cached.conn.useDb(mainDbName, { useCache: true });
 }
 
 async function findMainUserByEmail(email) {
@@ -159,11 +165,28 @@ async function getMainSocialByEmail(email) {
   return {
     found: true,
     polycoder: doc.polycoder ? normalizeUsername(doc.polycoder) : null,
-    followers: asEmailList(doc.followers),
+    email: normalizeEmail(doc.email),
+    // QL schema historically used singular `follower`; prefer plural when present.
+    followers: asEmailList(doc.followers ?? doc.follower),
     followings: asEmailList(doc.followings ?? doc.following),
     name: doc.name || null,
     avatar: doc.avatar || null,
   };
+}
+
+async function findMainUserByPolycoder(polycoder) {
+  const normalized = normalizeUsername(polycoder);
+  if (!normalized) return null;
+
+  const mainDb = await getMainDatabase();
+  if (!mainDb) return null;
+
+  return mainDb.collection("users").findOne({
+    polycoder: {
+      $regex: `^${escapeRegex(normalized)}$`,
+      $options: "i",
+    },
+  });
 }
 
 /**
@@ -225,7 +248,10 @@ async function updateMainFollowRelationship({
   if (follow) {
     const [targetResult, followerResult] = await Promise.all([
       users.updateOne(emailFilter(normalizedTargetEmail), {
-        $addToSet: { followers: normalizedFollowerEmail },
+        $addToSet: {
+          followers: normalizedFollowerEmail,
+          follower: normalizedFollowerEmail,
+        },
         $currentDate: { updatedAt: true },
       }),
       users.updateOne(emailFilter(normalizedFollowerEmail), {
@@ -244,7 +270,10 @@ async function updateMainFollowRelationship({
 
   const [targetResult, followerResult] = await Promise.all([
     users.updateOne(emailFilter(normalizedTargetEmail), {
-      $pull: { followers: normalizedFollowerEmail },
+      $pull: {
+        followers: normalizedFollowerEmail,
+        follower: normalizedFollowerEmail,
+      },
       $currentDate: { updatedAt: true },
     }),
     users.updateOne(emailFilter(normalizedFollowerEmail), {
@@ -297,9 +326,19 @@ async function syncMainFollowersForEmail({ targetEmail, followerEmails }) {
 function syncPolycoderForEmailSafe(user) {
   return syncPolycoderForEmail(user)
     .then((result) => {
+      if (result?.skipped) {
+        console.warn(
+          `Main user polycoder sync skipped (${result.reason || "unknown"}): ${normalizeEmail(user?.email)}`,
+        );
+        return result;
+      }
       if (result?.matchedCount === 0) {
         console.warn(
-          `Main user polycoder sync skipped: no users document matched email ${normalizeEmail(user?.email)}`,
+          `Main user polycoder sync skipped: no quantum_logics.users doc for ${normalizeEmail(user?.email)} (check MAIN_MONGODB_URI points at the Quantum Logics cluster, MAIN_DB=${getMainDatabaseName()})`,
+        );
+      } else if (result?.modifiedCount > 0) {
+        console.log(
+          `Main user polycoder synced: ${normalizeEmail(user?.email)} → ${normalizeUsername(user?.username)}`,
         );
       }
       return result;
@@ -349,6 +388,7 @@ function syncMainFollowersForEmailSafe(payload) {
 
 module.exports = {
   findMainUserByEmail,
+  findMainUserByPolycoder,
   getMainSocialByEmail,
   syncPolycoderForEmail,
   syncPolycoderForEmailSafe,

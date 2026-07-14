@@ -259,6 +259,7 @@ async function completeLesson(userId, courseId, lesson) {
       throw new Error("lessonId is required");
     }
 
+    const xpAmount = Math.max(0, Number(lesson.xp) || 0);
     const existing = course.completedLessons.find(
       (item) => item.lessonId === lessonId,
     );
@@ -270,17 +271,31 @@ async function completeLesson(userId, courseId, lesson) {
         title: lesson.title || "",
         chapterId: lesson.chapterId || "",
         chapterTitle: lesson.chapterTitle || "",
-        xp: lesson.xp || 0,
+        xp: xpAmount,
         completedAt,
       });
       recalcTotalXp(course);
-      // Keep Learning activity graph in sync with course XP (same save).
       dailyXpService.applyLessonXp(learner, {
         course: courseId,
         lessonId,
         title: lesson.title || "",
-        xp: lesson.xp || 0,
+        xp: xpAmount,
         recordedAt: completedAt,
+      });
+    } else {
+      // Backfill XP if lesson was marked complete earlier without points.
+      const prevXp = Math.max(0, Number(existing.xp) || 0);
+      if (xpAmount > prevXp) {
+        existing.xp = xpAmount;
+        if (lesson.title) existing.title = lesson.title;
+        recalcTotalXp(course);
+      }
+      dailyXpService.applyLessonXp(learner, {
+        course: courseId,
+        lessonId,
+        title: lesson.title || existing.title || "",
+        xp: Math.max(xpAmount, prevXp),
+        recordedAt: existing.completedAt || new Date(),
       });
     }
 
@@ -373,6 +388,7 @@ async function mergeLocalProgress(userId, courseId, localPayload = {}) {
         (item) => item.lessonId === lessonId,
       );
       const localAt = meta?.at ? new Date(meta.at) : null;
+      const incomingXp = Math.max(0, Number(meta?.xp) || 0);
       if (!existing) {
         const completedAt =
           localAt && !Number.isNaN(localAt.getTime()) ? localAt : new Date();
@@ -381,25 +397,37 @@ async function mergeLocalProgress(userId, courseId, localPayload = {}) {
           title: meta?.title || "",
           chapterId: meta?.chapterId || "",
           chapterTitle: meta?.chapterTitle || "",
-          xp: Number(meta?.xp) || 0,
+          xp: incomingXp,
           completedAt,
         });
         dailyXpService.applyLessonXp(learner, {
           course: courseId,
           lessonId,
           title: meta?.title || "",
-          xp: Number(meta?.xp) || 0,
+          xp: incomingXp,
           recordedAt: completedAt,
         });
-      } else if (
-        localAt &&
-        !Number.isNaN(localAt.getTime()) &&
-        existing.completedAt &&
-        localAt > new Date(existing.completedAt)
-      ) {
-        existing.xp = Number(meta?.xp) || existing.xp || 0;
-        if (meta?.title) existing.title = meta.title;
-        existing.completedAt = localAt;
+      } else {
+        const prevXp = Math.max(0, Number(existing.xp) || 0);
+        if (incomingXp > prevXp) {
+          existing.xp = incomingXp;
+        }
+        if (meta?.title && !existing.title) existing.title = meta.title;
+        if (
+          localAt &&
+          !Number.isNaN(localAt.getTime()) &&
+          existing.completedAt &&
+          localAt > new Date(existing.completedAt)
+        ) {
+          existing.completedAt = localAt;
+        }
+        dailyXpService.applyLessonXp(learner, {
+          course: courseId,
+          lessonId,
+          title: meta?.title || existing.title || "",
+          xp: Math.max(incomingXp, prevXp),
+          recordedAt: existing.completedAt || localAt || new Date(),
+        });
       }
     }
 

@@ -23,20 +23,25 @@ function ensureDailyXp(learner) {
   return learner.dailyXp;
 }
 
-function findLessonAcrossDays(dailyXp, lessonId, course = "") {
+function findDayForLesson(dailyXp, lessonId, course = "") {
   for (const day of dailyXp.days || []) {
     const hit = (day.lessons || []).find((lesson) => {
       if (lesson.lessonId !== lessonId) return false;
       if (!course) return true;
       return !lesson.course || lesson.course === course;
     });
-    if (hit) return hit;
+    if (hit) return { day, lesson: hit };
   }
   return null;
 }
 
+function findLessonAcrossDays(dailyXp, lessonId, course = "") {
+  return findDayForLesson(dailyXp, lessonId, course)?.lesson || null;
+}
+
 /**
- * Mutate learner.dailyXp in-memory (no save). Returns true if a lesson was added.
+ * Mutate learner.dailyXp in-memory (no save).
+ * Returns true if XP was added or upgraded.
  */
 function applyLessonXp(learner, payload = {}) {
   const {
@@ -53,9 +58,19 @@ function applyLessonXp(learner, payload = {}) {
   if (xpAmount <= 0) return false;
 
   const dailyXp = ensureDailyXp(learner);
+  const existing = findDayForLesson(dailyXp, lessonId, course);
 
-  if (findLessonAcrossDays(dailyXp, lessonId, course)) {
-    return false;
+  // Upgrade undercounted rows (e.g. completed earlier with xp:0 / missing daily entry XP).
+  if (existing) {
+    const prev = Math.max(0, Number(existing.lesson.xp) || 0);
+    if (xpAmount <= prev) return false;
+    const delta = xpAmount - prev;
+    existing.lesson.xp = xpAmount;
+    if (title) existing.lesson.title = title;
+    if (course && !existing.lesson.course) existing.lesson.course = course;
+    existing.day.lessonXp = (existing.day.lessonXp || 0) + delta;
+    dailyXp.totalXp = (dailyXp.totalXp || 0) + delta;
+    return true;
   }
 
   const dateKey = toDateKey(recordedAt);
@@ -71,10 +86,6 @@ function applyLessonXp(learner, payload = {}) {
       readAt: null,
     });
     day = dailyXp.days[dailyXp.days.length - 1];
-  }
-
-  if ((day.lessons || []).some((lesson) => lesson.lessonId === lessonId)) {
-    return false;
   }
 
   day.lessons.push({

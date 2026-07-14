@@ -75,7 +75,8 @@ async function enrichWithMainSocial(serializedUser) {
     serializedUser.firstName = parts[0] || "";
     serializedUser.lastName = parts.length > 1 ? parts.slice(1).join(" ") : "";
   }
-  serializedUser.polycoder = social.polycoder || serializedUser.username;
+  // Always expose the PolyCode username as polycoder (source of truth).
+  serializedUser.polycoder = serializedUser.username;
   return serializedUser;
 }
 
