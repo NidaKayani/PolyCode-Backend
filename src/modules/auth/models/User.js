@@ -80,11 +80,7 @@ userSchema.methods.toJSON = function () {
     .filter(Boolean);
   user.firstName = parts[0] || "";
   user.lastName = parts.length > 1 ? parts.slice(1).join(" ") : "";
-  user.followersCount = 0;
-  user.followingCount = 0;
-  user.followers = [];
-  user.following = [];
-  user.bio = user.bio || "";
+  user.bio = "";
   user.isActive = true;
   return user;
 };

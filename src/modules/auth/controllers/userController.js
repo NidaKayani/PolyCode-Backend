@@ -206,13 +206,7 @@ async function unfollowUser(req, res) {
 async function getFollowStatus(req, res) {
   try {
     const { username } = req.params;
-    const viewer = await userService.getUserById(req.userId);
-    const target = await userService.getUserByUsername(username);
-    const targetId = String(target._id || target.id);
-    const isFollowing = (viewer.following || []).some(
-      (id) => String(id) === targetId,
-    );
-
+    const isFollowing = await userService.isFollowingUser(req.userId, username);
     res.json({ isFollowing });
   } catch (error) {
     console.error("Follow status error:", error.message);

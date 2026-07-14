@@ -62,11 +62,35 @@ function normalizeEmail(email) {
   return String(email || "").trim().toLowerCase();
 }
 
-function normalizeEmailList(emails = []) {
+function normalizeUsername(username) {
+  return String(username || "").trim().toLowerCase();
+}
+
+function escapeRegex(value) {
+  return String(value).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function emailFilter(email) {
+  return {
+    email: {
+      $regex: `^${escapeRegex(email)}$`,
+      $options: "i",
+    },
+  };
+}
+
+function asEmailList(value) {
+  if (!Array.isArray(value)) return [];
   return Array.from(
     new Set(
-      emails
-        .map(normalizeEmail)
+      value
+        .map((item) => {
+          if (typeof item === "string") return normalizeEmail(item);
+          if (item && typeof item === "object" && item.email) {
+            return normalizeEmail(item.email);
+          }
+          return "";
+        })
         .filter(Boolean),
     ),
   );
@@ -109,9 +133,45 @@ async function getMainDatabase() {
   return mongoose.connection.useDb(mainDbName, { useCache: true });
 }
 
+async function findMainUserByEmail(email) {
+  const normalizedEmail = normalizeEmail(email);
+  if (!normalizedEmail) return null;
+
+  const mainDb = await getMainDatabase();
+  if (!mainDb) return null;
+
+  return mainDb.collection("users").findOne(emailFilter(normalizedEmail));
+}
+
+async function getMainSocialByEmail(email) {
+  const doc = await findMainUserByEmail(email);
+  if (!doc) {
+    return {
+      found: false,
+      polycoder: null,
+      followers: [],
+      followings: [],
+      name: null,
+      avatar: null,
+    };
+  }
+
+  return {
+    found: true,
+    polycoder: doc.polycoder ? normalizeUsername(doc.polycoder) : null,
+    followers: asEmailList(doc.followers),
+    followings: asEmailList(doc.followings ?? doc.following),
+    name: doc.name || null,
+    avatar: doc.avatar || null,
+  };
+}
+
+/**
+ * If quantum_logics.users has matching email, set polycoder = PolyCode username.
+ */
 async function syncPolycoderForEmail({ email, username }) {
   const normalizedEmail = normalizeEmail(email);
-  const normalizedUsername = String(username || "").trim().toLowerCase();
+  const normalizedUsername = normalizeUsername(username);
 
   if (!normalizedEmail || !normalizedUsername) {
     return { skipped: true };
@@ -123,14 +183,10 @@ async function syncPolycoderForEmail({ email, username }) {
   }
 
   const result = await mainDb.collection("users").updateOne(
-    { email: normalizedEmail },
+    emailFilter(normalizedEmail),
     {
-      $set: {
-        polycoder: normalizedUsername,
-      },
-      $currentDate: {
-        updatedAt: true,
-      },
+      $set: { polycoder: normalizedUsername },
+      $currentDate: { updatedAt: true },
     },
   );
 
@@ -140,12 +196,23 @@ async function syncPolycoderForEmail({ email, username }) {
   };
 }
 
-async function updateMainFollowerEmail({ targetEmail, followerEmail, follow }) {
+/**
+ * target.followers += follower email
+ * follower.followings += target email
+ */
+async function updateMainFollowRelationship({
+  targetEmail,
+  followerEmail,
+  follow,
+}) {
   const normalizedTargetEmail = normalizeEmail(targetEmail);
   const normalizedFollowerEmail = normalizeEmail(followerEmail);
 
   if (!normalizedTargetEmail || !normalizedFollowerEmail) {
     return { skipped: true };
+  }
+  if (normalizedTargetEmail === normalizedFollowerEmail) {
+    return { skipped: true, reason: "same email" };
   }
 
   const mainDb = await getMainDatabase();
@@ -153,34 +220,56 @@ async function updateMainFollowerEmail({ targetEmail, followerEmail, follow }) {
     return { skipped: true, reason: "Main MongoDB is not connected" };
   }
 
-  const result = await mainDb.collection("users").updateOne(
-    { email: normalizedTargetEmail },
-    follow
-      ? {
-          $addToSet: {
-            follower: normalizedFollowerEmail,
-            followers: normalizedFollowerEmail,
-          },
-          $currentDate: { updatedAt: true },
-        }
-      : {
-          $pull: {
-            follower: normalizedFollowerEmail,
-            followers: normalizedFollowerEmail,
-          },
-          $currentDate: { updatedAt: true },
-        },
-  );
+  const users = mainDb.collection("users");
+
+  if (follow) {
+    const [targetResult, followerResult] = await Promise.all([
+      users.updateOne(emailFilter(normalizedTargetEmail), {
+        $addToSet: { followers: normalizedFollowerEmail },
+        $currentDate: { updatedAt: true },
+      }),
+      users.updateOne(emailFilter(normalizedFollowerEmail), {
+        $addToSet: { followings: normalizedTargetEmail },
+        $currentDate: { updatedAt: true },
+      }),
+    ]);
+
+    return {
+      matchedCount: targetResult.matchedCount + followerResult.matchedCount,
+      modifiedCount: targetResult.modifiedCount + followerResult.modifiedCount,
+      targetMatched: targetResult.matchedCount,
+      followerMatched: followerResult.matchedCount,
+    };
+  }
+
+  const [targetResult, followerResult] = await Promise.all([
+    users.updateOne(emailFilter(normalizedTargetEmail), {
+      $pull: { followers: normalizedFollowerEmail },
+      $currentDate: { updatedAt: true },
+    }),
+    users.updateOne(emailFilter(normalizedFollowerEmail), {
+      $pull: { followings: normalizedTargetEmail },
+      $currentDate: { updatedAt: true },
+    }),
+  ]);
 
   return {
-    matchedCount: result.matchedCount,
-    modifiedCount: result.modifiedCount,
+    matchedCount: targetResult.matchedCount + followerResult.matchedCount,
+    modifiedCount: targetResult.modifiedCount + followerResult.modifiedCount,
+    targetMatched: targetResult.matchedCount,
+    followerMatched: followerResult.matchedCount,
   };
+}
+
+async function updateMainFollowerEmail(payload) {
+  return updateMainFollowRelationship(payload);
 }
 
 async function syncMainFollowersForEmail({ targetEmail, followerEmails }) {
   const normalizedTargetEmail = normalizeEmail(targetEmail);
-  const normalizedFollowerEmails = normalizeEmailList(followerEmails);
+  const normalizedFollowerEmails = Array.from(
+    new Set((followerEmails || []).map(normalizeEmail).filter(Boolean)),
+  );
 
   if (!normalizedTargetEmail) {
     return { skipped: true };
@@ -192,12 +281,9 @@ async function syncMainFollowersForEmail({ targetEmail, followerEmails }) {
   }
 
   const result = await mainDb.collection("users").updateOne(
-    { email: normalizedTargetEmail },
+    emailFilter(normalizedTargetEmail),
     {
-      $set: {
-        follower: normalizedFollowerEmails,
-        followers: normalizedFollowerEmails,
-      },
+      $set: { followers: normalizedFollowerEmails },
       $currentDate: { updatedAt: true },
     },
   );
@@ -225,11 +311,16 @@ function syncPolycoderForEmailSafe(user) {
 }
 
 function updateMainFollowerEmailSafe(payload) {
-  return updateMainFollowerEmail(payload)
+  return updateMainFollowRelationship(payload)
     .then((result) => {
-      if (result?.matchedCount === 0) {
+      if (result?.targetMatched === 0 && !result?.skipped) {
         console.warn(
-          `Main user follower sync skipped: no users document matched email ${normalizeEmail(payload?.targetEmail)}`,
+          `Main follow sync: no quantum_logics user for target ${normalizeEmail(payload?.targetEmail)}`,
+        );
+      }
+      if (result?.followerMatched === 0 && !result?.skipped) {
+        console.warn(
+          `Main follow sync: no quantum_logics user for follower ${normalizeEmail(payload?.followerEmail)}`,
         );
       }
       return result;
@@ -257,10 +348,14 @@ function syncMainFollowersForEmailSafe(payload) {
 }
 
 module.exports = {
+  findMainUserByEmail,
+  getMainSocialByEmail,
   syncPolycoderForEmail,
   syncPolycoderForEmailSafe,
+  updateMainFollowRelationship,
   updateMainFollowerEmail,
   updateMainFollowerEmailSafe,
   syncMainFollowersForEmail,
   syncMainFollowersForEmailSafe,
+  normalizeEmail,
 };

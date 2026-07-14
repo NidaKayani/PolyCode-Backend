@@ -1,5 +1,10 @@
 const User = require("../models/User");
-const { syncPolycoderForEmailSafe } = require("../../../services/mainUserSyncService");
+const {
+  syncPolycoderForEmailSafe,
+  getMainSocialByEmail,
+  updateMainFollowerEmailSafe,
+  normalizeEmail,
+} = require("../../../services/mainUserSyncService");
 
 function capitalizeNamePart(value = "") {
   const trimmed = String(value).trim();
@@ -55,24 +60,36 @@ async function ensureUsername(userDoc) {
   return userDoc;
 }
 
-async function toPublicUser(userDoc) {
-  const withUsername = await ensureUsername(userDoc);
-  const serializedUser = withUsername.toJSON();
-  scheduleMainDbProfileSync(withUsername, serializedUser);
+async function enrichWithMainSocial(serializedUser) {
+  const social = await getMainSocialByEmail(serializedUser.email);
+  serializedUser.followersCount = social.followers.length;
+  serializedUser.followingCount = social.followings.length;
+  serializedUser.followerEmails = social.followers;
+  serializedUser.followingEmails = social.followings;
+  if (social.found && social.avatar && !serializedUser.profilePicture) {
+    serializedUser.profilePicture = social.avatar;
+  }
+  if (social.found && social.name && !serializedUser.name) {
+    serializedUser.name = social.name;
+    const parts = String(social.name).trim().split(/\s+/).filter(Boolean);
+    serializedUser.firstName = parts[0] || "";
+    serializedUser.lastName = parts.length > 1 ? parts.slice(1).join(" ") : "";
+  }
+  serializedUser.polycoder = social.polycoder || serializedUser.username;
   return serializedUser;
 }
 
-function scheduleMainDbProfileSync(userDoc, serializedUser) {
-  setTimeout(() => {
-    syncPolycoderForEmailSafe(serializedUser).catch((error) => {
-      console.warn("Main DB profile background sync failed:", error.message);
-    });
-  }, 0);
-}
+async function toPublicUser(userDoc) {
+  const withUsername = await ensureUsername(userDoc);
+  const serializedUser = withUsername.toJSON();
 
-async function syncFollowersToMainDb() {
-  // Followers are no longer stored on PolyCode user docs.
-  return;
+  // Always try to write polycoder on matching quantum_logics email.
+  await syncPolycoderForEmailSafe({
+    email: serializedUser.email,
+    username: serializedUser.username,
+  });
+
+  return enrichWithMainSocial(serializedUser);
 }
 
 /**
@@ -273,14 +290,58 @@ function toUserSummary(user = {}) {
     firstName: parts[0] || "",
     lastName: parts.length > 1 ? parts.slice(1).join(" ") : "",
     email: user.email,
-    followersCount: 0,
-    followingCount: 0,
+    followersCount: Number(user.followersCount) || 0,
+    followingCount: Number(user.followingCount) || 0,
   };
 }
 
-async function listUserConnections() {
-  // Social graph is not stored on lean user docs.
-  return [];
+/**
+ * List followers or following from quantum_logics.users (by email arrays).
+ */
+async function listUserConnections(username, type = "followers") {
+  const normalizedUsername = String(username || "").trim().toLowerCase();
+  if (!USERNAME_RE.test(normalizedUsername)) {
+    throw new Error("User not found");
+  }
+
+  const user = await User.findOne({ username: normalizedUsername });
+  if (!user) {
+    throw new Error("User not found");
+  }
+
+  const social = await getMainSocialByEmail(user.email);
+  const emails =
+    type === "following" || type === "followings"
+      ? social.followings
+      : social.followers;
+
+  if (!emails.length) return [];
+
+  const polyUsers = await User.find({
+    email: { $in: emails },
+  }).lean();
+
+  const byEmail = new Map(
+    polyUsers.map((row) => [normalizeEmail(row.email), row]),
+  );
+
+  return emails.map((email) => {
+    const poly = byEmail.get(email);
+    if (poly) {
+      return toUserSummary({
+        ...poly,
+        name: poly.name,
+        firstName: undefined,
+        lastName: undefined,
+      });
+    }
+    return toUserSummary({
+      _id: email,
+      username: email.split("@")[0],
+      email,
+      name: email,
+    });
+  });
 }
 
 /**
@@ -335,8 +396,15 @@ async function updateUserProfile(userId, updateData) {
   }
 }
 
-async function setFollowRelationship(currentUserId, targetUsername) {
+/**
+ * Follow / unfollow via quantum_logics.users followers + followings arrays.
+ */
+async function setFollowRelationship(currentUserId, targetUsername, shouldFollow) {
   const normalizedUsername = String(targetUsername || "").trim().toLowerCase();
+  if (!USERNAME_RE.test(normalizedUsername)) {
+    throw new Error("User not found");
+  }
+
   const [currentUser, targetUser] = await Promise.all([
     User.findById(currentUserId),
     User.findOne({ username: normalizedUsername }),
@@ -348,8 +416,46 @@ async function setFollowRelationship(currentUserId, targetUsername) {
     throw new Error("You cannot follow yourself");
   }
 
-  // Lean users no longer store followers/following arrays.
-  throw new Error("Follow is not available on this account model yet");
+  const result = await updateMainFollowerEmailSafe({
+    targetEmail: targetUser.email,
+    followerEmail: currentUser.email,
+    follow: Boolean(shouldFollow),
+  });
+
+  if (result?.skipped && result?.reason === "Main MongoDB is not connected") {
+    throw new Error("Follow sync is unavailable (main database not connected)");
+  }
+
+  if (result?.targetMatched === 0) {
+    throw new Error(
+      "Target user has no Quantum Logics account with this email — follow needs a matching quantum_logics.users document",
+    );
+  }
+
+  const [viewer, target] = await Promise.all([
+    toPublicUser(currentUser),
+    toPublicUser(targetUser),
+  ]);
+
+  return {
+    isFollowing: Boolean(shouldFollow),
+    user: viewer,
+    targetUser: target,
+  };
+}
+
+async function isFollowingUser(viewerUserId, targetUsername) {
+  const normalizedUsername = String(targetUsername || "").trim().toLowerCase();
+  const [viewer, target] = await Promise.all([
+    User.findById(viewerUserId),
+    User.findOne({ username: normalizedUsername }),
+  ]);
+  if (!viewer || !target) {
+    throw new Error("User not found");
+  }
+
+  const social = await getMainSocialByEmail(target.email);
+  return social.followers.includes(normalizeEmail(viewer.email));
 }
 
 /**
@@ -428,6 +534,7 @@ module.exports = {
   listUserConnections,
   updateUserProfile,
   setFollowRelationship,
+  isFollowingUser,
   setProfilePicture,
   changePassword,
   deleteUserAccount,
