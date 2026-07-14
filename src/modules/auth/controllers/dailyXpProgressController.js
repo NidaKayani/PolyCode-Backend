@@ -1,3 +1,6 @@
+/**
+ * @deprecated Not mounted in auth.router.js. Use dailyXpController + DailyXpProgress.
+ */
 const dailyXpProgress = require("../services/dailyXpProgressService");
 
 async function getDailyXp(req, res) {

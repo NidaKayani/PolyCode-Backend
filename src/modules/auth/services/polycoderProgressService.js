@@ -1,6 +1,7 @@
 const User = require("../models/User");
 const UserProgress = require("../models/UserProgress");
 const OopsCppProgress = require("../models/OopsCppProgress");
+const CourseProgress = require("../models/CourseProgress");
 const dailyXpService = require("./dailyXpService");
 
 function normalizeUsername(username) {
@@ -183,11 +184,14 @@ async function getProgressByUsername(username) {
 
   const userId = user._id;
 
-  const [languageProgress, oopsCppProgress, dailyXp] = await Promise.all([
+  const [languageProgress, courseOops, legacyOops, dailyXp] = await Promise.all([
     UserProgress.find({ userId }).lean(),
+    CourseProgress.findOne({ userId, courseId: "oops-cpp" }).lean(),
     OopsCppProgress.findOne({ userId }).lean(),
     dailyXpService.getDailyXp(userId),
   ]);
+
+  const oopsCppProgress = courseOops || legacyOops;
 
   const firstName = user.firstName || "";
   const lastName = user.lastName || "";

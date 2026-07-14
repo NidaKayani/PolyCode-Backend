@@ -1,3 +1,7 @@
+/**
+ * @deprecated Unused alternate daily-XP model. Live routes use DailyXpProgress
+ * via dailyXpService / dailyXpController. Do not mount this path.
+ */
 const mongoose = require("mongoose");
 
 const xpEventSchema = new mongoose.Schema(

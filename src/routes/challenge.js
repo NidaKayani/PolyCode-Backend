@@ -3,6 +3,7 @@ const router = express.Router();
 const Challenge = require('../models/Challenge');
 const Submission = require('../models/Submission');
 const User = require('../modules/auth/models/User');
+const requireAuth = require('../middleware/requireAuth');
 const { 
     executePythonCode, 
     executeJavaScriptCode,
@@ -108,10 +109,11 @@ router.get('/', async (req, res) => {
     res.json(challenges);
 });
 
-// POST submit a solution
-router.post('/:id/submit', async (req, res) => {
+// POST submit a solution (requires signed-in PolyCode account)
+router.post('/:id/submit', requireAuth, async (req, res) => {
     try {
-        const { userId, language, code } = req.body;
+        const userId = String(req.userId);
+        const { language, code } = req.body;
         const challenge = await Challenge.findById(req.params.id);
         if (!challenge) return res.status(404).json({ message: 'Not found' });
 
@@ -299,7 +301,7 @@ int main() {
                     }
                 }
                 
-                // Update User model if userId is a valid ObjectId
+                // Update User streak for authenticated submitter
                 try {
                     await User.findByIdAndUpdate(userId, { 
                         currentStreak: streak, 

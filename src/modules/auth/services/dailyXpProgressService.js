@@ -1,3 +1,6 @@
+/**
+ * @deprecated Not mounted in auth.router.js. Use dailyXpService + DailyXpProgress.
+ */
 const UserDailyProgress = require("../models/UserDailyProgress");
 const OopsCppProgress = require("../models/OopsCppProgress");
 

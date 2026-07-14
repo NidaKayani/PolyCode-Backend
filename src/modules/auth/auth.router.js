@@ -4,6 +4,7 @@ const userController = require("./controllers/userController");
 const progressController = require("./controllers/progressController");
 const dailyXpController = require("./controllers/dailyXpController");
 const oopsCppProgressController = require("./controllers/oopsCppProgressController");
+const courseProgressController = require("./controllers/courseProgressController");
 const requireAuth = require("../../middleware/requireAuth");
 
 // ── User Auth Routes ─────────────────────────────────────────────────────────
@@ -32,6 +33,12 @@ router.get("/username/:username/followers", userController.getFollowers);
 
 /** GET /api/auth/username/:username/following */
 router.get("/username/:username/following", userController.getFollowing);
+
+/** GET /api/auth/username/:username/learn/progress — public course progress */
+router.get(
+  "/username/:username/learn/progress",
+  courseProgressController.listPublicProgress,
+);
 
 /** POST /api/auth/username/:username/follow */
 router.post(
@@ -126,7 +133,56 @@ router.post(
 );
 router.get("/progress/dashboard/:userId", progressController.getDashboardStats);
 
-// ── Learn: OOP C++ Progress Routes ───────────────────────────────────────────
+// ── Learn: Shared Course Progress Routes ─────────────────────────────────────
+
+router.get(
+  "/learn/progress",
+  requireAuth,
+  courseProgressController.listMyProgress,
+);
+router.post(
+  "/learn/progress/merge",
+  requireAuth,
+  courseProgressController.mergeLocal,
+);
+
+router.get(
+  "/learn/:courseId/progress",
+  requireAuth,
+  courseProgressController.getProgress,
+);
+router.post(
+  "/learn/:courseId/progress/last-lesson",
+  requireAuth,
+  courseProgressController.setLastLesson,
+);
+router.post(
+  "/learn/:courseId/progress/complete",
+  requireAuth,
+  courseProgressController.completeLesson,
+);
+router.post(
+  "/learn/:courseId/progress/code",
+  requireAuth,
+  courseProgressController.saveCode,
+);
+router.post(
+  "/learn/:courseId/progress/note",
+  requireAuth,
+  courseProgressController.saveNote,
+);
+router.post(
+  "/learn/:courseId/progress/bookmark",
+  requireAuth,
+  courseProgressController.toggleBookmark,
+);
+router.post(
+  "/learn/:courseId/progress/time",
+  requireAuth,
+  courseProgressController.addTime,
+);
+
+// ── Learn: OOP C++ Progress Routes (legacy aliases → shared CourseProgress) ──
 
 router.get(
   "/learn/oops-cpp/progress",
