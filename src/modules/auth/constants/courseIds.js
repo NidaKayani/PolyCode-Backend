@@ -6,6 +6,7 @@ const COURSE_IDS = [
   "pandas-py",
   "fastapi-py",
   "pytorch-py",
+  "huggingface-py",
   "opencv-py",
   "python-fundamentals",
   "python-oop-py",
