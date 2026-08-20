@@ -52,6 +52,7 @@ const COURSE_IDS = [
   "java-jdbc",
   "java-spring-boot",
   "java-projects",
+  "software-engineering-fundamentals",
 ];
 
 const COURSE_ID_SET = new Set(COURSE_IDS);
