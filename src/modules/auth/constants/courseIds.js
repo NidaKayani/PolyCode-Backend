@@ -15,6 +15,7 @@ const COURSE_IDS = [
   "ai-ml-py",
   "cpp-fundamentals",
   "dsa-cpp",
+  "cpp-data-structures",
   "c-fundamentals",
   "c-functions",
   "c-pointers",
