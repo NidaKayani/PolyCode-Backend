@@ -684,6 +684,13 @@ async function getLearnDashboard(userId) {
       challengeFails,
     },
     courses: courseRows,
+    // Per-day lesson counts for the profile activity graph (UTC date keys).
+    activity: (dailyXp?.days || [])
+      .filter((day) => day.lessonsCompleted > 0)
+      .map((day) => ({
+        date: day.date,
+        lessonsCompleted: day.lessonsCompleted,
+      })),
   };
 }
 
